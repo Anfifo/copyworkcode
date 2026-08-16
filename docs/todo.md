@@ -1,6 +1,8 @@
 # TODO
 
-Working list, roughly in build order. Design rationale lives in [design.md](design.md).
+Working list, roughly in build order — committed work only. Design rationale lives in
+[design.md](design.md); uncommitted ideas live in [brainstorm.md](brainstorm.md) and get
+promoted here when they're deemed worth building.
 
 ## Next up
 

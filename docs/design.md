@@ -127,16 +127,6 @@ tamper-evidence machinery, and keeps the extension out of surveillance territory
   The retype loop should reach crappy-but-real as early as possible to test the
   hypothesis before any polish work.
 
-## Roadmap (agreed, not yet designed)
-
-- **Manual edits during retype.** Retyping shouldn't require byte-perfect copying — the
-  user may improve or reformat as they type. When the typed result deviates from what the
-  AI wrote, notify the user that the AI's context is now stale and offer a pastable prompt
-  summarizing their edits, so they can re-sync the assistant.
-- **Auto-skip rules** by glob, change size, and change kind (formatting-only).
-- **Adapters for more agents** beyond the first integration.
-- **Review stats** — typed/skipped ratios over time, per file area.
-
 ## Repo layout
 
 - `src/` — extension source (TypeScript).
