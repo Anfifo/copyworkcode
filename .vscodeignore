@@ -1,0 +1,14 @@
+.vscode/**
+.vscode-test/**
+.claude/**
+.copyworkcode/**
+src/**
+docs/**
+out/**/*.map
+node_modules/**
+.gitignore
+.vscodeignore
+tsconfig.json
+*.tsbuildinfo
+CLAUDE.md
+CLAUDE.local.md
