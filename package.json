@@ -1,0 +1,71 @@
+{
+  "name": "copyworkcode",
+  "displayName": "CopyWorkCode",
+  "description": "Review AI-generated code changes by typing them yourself.",
+  "version": "0.0.1",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "copyworkcode.enableWorkspace",
+        "title": "CopyWorkCode: Enable in this Workspace"
+      },
+      {
+        "command": "copyworkcode.installAgentHook",
+        "title": "CopyWorkCode: Install Agent Integration"
+      },
+      {
+        "command": "copyworkcode.reviewChange",
+        "title": "CopyWorkCode: Review Change"
+      },
+      {
+        "command": "copyworkcode.skipChange",
+        "title": "CopyWorkCode: Skip Change"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "copyworkcode.unreviewed",
+          "name": "Unreviewed AI Changes"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "CopyWorkCode",
+      "properties": {
+        "copyworkcode.autoSkipGlobs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/package-lock.json",
+            "**/*.lock",
+            "**/node_modules/**"
+          ],
+          "description": "Changes to files matching these globs are skipped automatically."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.5.0"
+  }
+}
