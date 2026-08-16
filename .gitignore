@@ -1,0 +1,16 @@
+# Local assistant instructions — never commit
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+
+# Node / VSCode extension build output
+node_modules/
+out/
+dist/
+*.vsix
+*.tsbuildinfo
+
+# Editor / OS noise
+.vscode-test/
+.DS_Store
+Thumbs.db
