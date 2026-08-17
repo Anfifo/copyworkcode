@@ -74,6 +74,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
 function startTracking(root: string, context: vscode.ExtensionContext): void {
   if (queue) return; // already tracking this window
+  void vscode.commands.executeCommand('setContext', 'copyworkcode.enabled', true);
 
   queue = new EventQueue(root);
   log = new ReviewLog(root);

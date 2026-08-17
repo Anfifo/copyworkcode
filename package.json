@@ -50,14 +50,35 @@
         "title": "CopyWorkCode: Stop Review"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "copyworkcode",
+          "title": "CopyWorkCode",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
     "views": {
-      "explorer": [
+      "copyworkcode": [
         {
           "id": "copyworkcode.debt",
           "name": "AI Changes to Review"
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "copyworkcode.debt",
+        "contents": "Review AI-made code changes by typing them yourself.\n[Enable in this Workspace](command:copyworkcode.enableWorkspace)",
+        "when": "!copyworkcode.enabled"
+      },
+      {
+        "view": "copyworkcode.debt",
+        "contents": "All clear — no changes waiting for review.",
+        "when": "copyworkcode.enabled"
+      }
+    ],
     "menus": {
       "view/title": [
         {
