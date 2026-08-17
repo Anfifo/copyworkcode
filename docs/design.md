@@ -25,9 +25,17 @@ Two detection layers, one event queue.
 
 ### Layer 1 — agent hook integration (precise, carries intent)
 
-Tools that expose lifecycle hooks (Claude Code first) get a small hook script that fires
-after every file edit/write the agent performs. The hook appends a JSON line to
-`.copyworkcode/events.jsonl` in the workspace. Key properties:
+Tools that expose lifecycle hooks (Claude Code first) get a small hook script registered
+for two moments around every file edit/write the agent performs:
+
+- **Before the tool runs**, the hook snapshots the file's current content into
+  `.copyworkcode/baselines/` — but only if no baseline exists yet. This preserves the
+  pre-change state the review diff needs, even when the editor is closed, and never
+  overwrites a baseline (that would erase unreviewed debt).
+- **After the tool runs**, the hook appends a JSON change event to
+  `.copyworkcode/events.jsonl`.
+
+Key properties:
 
 - **Works regardless of where the agent runs.** The hook runs inside the agent's process
   — external terminal, integrated terminal, another window. Events land in the workspace
@@ -66,6 +74,20 @@ content. Captured events are not the debt — they are **annotations** on that d
 mark which regions changed at the hand of an agent and carry the intent pointers for those
 regions. Completing a review advances the baseline to the current content.
 
+Mechanics of the store:
+
+- One snapshot file per source file under `.copyworkcode/baselines/`, named by the
+  percent-encoded workspace-relative path (forward slashes). Flat, greppable, no index to
+  corrupt. The hook re-implements this naming in plain JS; the two must stay in sync.
+- The *initial* baseline for a file is written by the capture hook just before the
+  agent's first edit (see Layer 1). A brand-new file gets an empty baseline, so its whole
+  content is debt. Files without a baseline have no debt — the extension only ever asks
+  for review of changes it saw an agent make.
+- The baseline advances when a review completes, when the user skips a file, or when an
+  auto-skip glob matches a change event.
+- Diffing is line-based, and line endings are normalized first: a CRLF/LF difference is
+  never review debt.
+
 Consequences:
 
 - Agent iteration collapses to one review of the final result, not N intermediate states.
@@ -84,11 +106,27 @@ makes the review metric "debt cleared" rather than "gate passed".
 
 ## Review UI: real editor, not a webview
 
-The review experience opens the actual file in a diff-style view, auto-jumps to the next
-unreviewed section, and guides retyping in place — with skip-section and fill-next-line
-controls. Built on real text editors with decorations (not a webview) so IntelliSense,
-navigation, and every language feature keep working while reviewing. The user can freely
-look around the rest of the file mid-review.
+The review experience opens the actual file in a diff view against its baseline,
+auto-jumps to the next unreviewed section, and guides retyping in place — with
+skip-section (Alt+S) and fill-next-line (Alt+F) controls, and Shift+Esc to stop. Built on
+real text editors with decorations (not a webview) so IntelliSense, navigation, and every
+language feature keep working while reviewing. The user can freely look around the rest
+of the file mid-review.
+
+How the in-place retype works, given that changes are already applied to the file
+(apply-now model): the flow walks the changed sections top to bottom; the current
+section's new text is removed from the buffer and the user types it back in, validated
+keystroke by keystroke, with the upcoming text of the line shown as a ghost preview at
+the cursor. Reproducing the section exactly means the file ends the review byte-identical
+to where it started — the typing was the review. Sections that only *removed* lines have
+nothing to retype; they are shown in the diff and confirmed with one click.
+
+Keystrokes are intercepted with a `type` command override while a review is active. That
+is what guarantees completions, snippets, and auto-closing pairs can never insert text on
+the user's behalf inside the review region — rather than trying to disable each editor
+convenience individually. Any buffer change that doesn't come from the review flow itself
+(undo, a formatter, an agent editing the file mid-review) aborts the review and restores
+the content; debt is left in place.
 
 ### Retype matching rules
 
@@ -101,10 +139,17 @@ Typing in a real buffer means the editor itself modifies text the user didn't ty
 - **Whitespace snaps to the target.** Any whitespace keystroke (space, enter, tab) at a
   formatting boundary auto-applies whatever whitespace the target text actually has —
   press space where the target has a newline and the newline is inserted for you, and
-  vice versa. Line endings and auto-indent artifacts can never cause a mismatch.
-- **Strictness is a setting.** A permissive mode lets the user deliberately deviate —
-  reformat or improve as they type — which feeds the deviation flow below (stale-context
-  notification + re-sync prompt) instead of counting as a mismatch.
+  vice versa. Typing the next visible character while whitespace is pending applies the
+  run too, so indentation never has to be typed. Line endings and auto-indent artifacts
+  can never cause a mismatch.
+- **Trailing whitespace is absorbed.** When only whitespace remains in a section, the
+  last accepted keystroke completes it — otherwise every section would end on an
+  invisible pending newline the user has to guess at.
+- **Strictness is a setting** (not yet implemented; see todo). A permissive mode lets the
+  user deliberately deviate — reformat or improve as they type — which feeds the
+  deviation flow below (stale-context notification + re-sync prompt) instead of counting
+  as a mismatch. The current behavior is the strict mode: mismatched keystrokes insert
+  nothing.
 
 ## Review stats: personal only
 
@@ -129,7 +174,14 @@ tamper-evidence machinery, and keeps the extension out of surveillance territory
 
 ## Repo layout
 
-- `src/` — extension source (TypeScript).
+- `src/` — extension source (TypeScript). `src/core/` holds editor-independent logic
+  (diff, retype matching, baseline store, event-log parsing) so it can be unit-tested
+  with plain Node.
 - `hook/` — standalone hook script installed into agent tooling (plain Node, no deps).
-- `.copyworkcode/` — per-workspace runtime data (event queue, review state). Never
-  committed; the extension offers to gitignore it when enabling a workspace.
+- `test/` — unit tests (`npm test`, Node's built-in runner). The hook script is tested
+  end-to-end by spawning it as a subprocess with realistic payloads.
+- `test-integration/` — extension-host tests (`npm run test:integration`): boots a real
+  editor against a fixture workspace and drives a full retype review, section skip,
+  file skip, and abort through the command layer.
+- `.copyworkcode/` — per-workspace runtime data (event queue, baselines, review state).
+  Never committed; the extension offers to gitignore it when enabling a workspace.

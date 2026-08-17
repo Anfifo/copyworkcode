@@ -24,4 +24,8 @@ change with a click, and configure rules to auto-skip files you don't care to re
 
 ## Status
 
-Early development. Not yet functional.
+Early development. The core loop works end to end: changes made by Claude Code are
+captured via hooks, files with unreviewed changes show up in an explorer view, and each
+one can be reviewed by retyping it in a guided diff view (or skipped — per section, per
+file, or automatically by glob). Intent capture, heuristic detection for other tools, and
+the polish list are still ahead.

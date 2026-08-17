@@ -6,18 +6,12 @@ promoted here when they're deemed worth building.
 
 ## Next up
 
-- [ ] **Smoke-test the capture hook against a real agent session** — confirm the payload
-      field names match what the hook script expects before building on top of it.
-- [ ] **Baseline snapshot store** — per-file last-reviewed snapshots; debt becomes the
-      diff between baseline and current content, with events as annotations on it (see
-      design.md, "Unit of review"). Replaces the raw event queue as the review model and
-      is a prerequisite for the retype UI.
-- [ ] **Guided retype experience** — the core of the product; needs a dedicated design
-      pass before coding. Constraints already agreed: real editors + decorations (not a
-      webview) so IntelliSense and navigation keep working; diff-style view; auto-jump to
-      the next unreviewed section; skip-section and fill-next-line controls; free
-      exploration of the rest of the file mid-review; matching rules per design.md
-      (character-for-character code, whitespace snaps to target, strictness setting).
+- [ ] **Dogfood the core loop on real work** — the retype flow is built and tested, but
+      the product hypothesis (retyping feels like review, not punishment) is only
+      testable by living with it. Expect matching-rule and pacing tweaks to fall out.
+- [ ] **Strictness setting for retype matching** — the permissive mode from design.md:
+      deliberate deviation stops counting as a mismatch and feeds the stale-context
+      re-sync flow (see "Later"). Current behavior is strict-only.
 - [ ] **Content-exclusion globs at the capture layer** — the hook must record only the
       occurrence (never the content) for matching files, so secrets are never duplicated
       into the event log.
