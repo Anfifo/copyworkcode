@@ -10,9 +10,23 @@ const MATCHER = 'Edit|Write|NotebookEdit';
 // PreToolUse snapshots the pre-change baseline; PostToolUse records the event.
 const HOOK_EVENTS = ['PreToolUse', 'PostToolUse'] as const;
 
+function settingsFile(): string {
+  return path.join(os.homedir(), '.claude', 'settings.json');
+}
+
+/** True when the capture hook is already present in the user's settings. */
+export function isClaudeCodeHookInstalled(): boolean {
+  try {
+    return fs.readFileSync(settingsFile(), 'utf8').includes(HOOK_MARKER);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Install the change-capture hook into Claude Code's user-scope settings
- * (~/.claude/settings.json), after explicit confirmation.
+ * (~/.claude/settings.json). Callers own the consent: this runs only from the
+ * explicit palette command or after the user accepted the enable-time offer.
  *
  * User scope is deliberate: the hook script itself no-ops in workspaces that
  * haven't enabled the extension, and installing once covers every project and
@@ -21,21 +35,11 @@ const HOOK_EVENTS = ['PreToolUse', 'PostToolUse'] as const;
 export async function installClaudeCodeHook(
   context: vscode.ExtensionContext
 ): Promise<void> {
-  const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+  const settingsPath = settingsFile();
   const hookScript = context.asAbsolutePath(
     path.join('hook', 'copyworkcode-hook.js')
   );
   const command = `node "${hookScript}"`;
-
-  const choice = await vscode.window.showInformationMessage(
-    `Install the CopyWorkCode capture hook into ${settingsPath}? ` +
-      'It records file changes made by Claude Code, only in workspaces where CopyWorkCode is enabled.',
-    { modal: true },
-    'Install'
-  );
-  if (choice !== 'Install') {
-    return;
-  }
 
   let settings: Record<string, unknown> = {};
   if (fs.existsSync(settingsPath)) {
@@ -60,7 +64,7 @@ export async function installClaudeCodeHook(
     fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
     void vscode.window.showInformationMessage(
-      'CopyWorkCode: capture hook installed. Running Claude Code sessions pick it up automatically.'
+      `CopyWorkCode: capture hook added to ${settingsPath}. Sessions started from now on will record their edits.`
     );
   } else {
     void vscode.window.showInformationMessage(

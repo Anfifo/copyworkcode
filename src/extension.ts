@@ -5,7 +5,10 @@ import { EventQueue } from './eventQueue';
 import { ReviewLog } from './reviewState';
 import { DebtTreeProvider } from './debtView';
 import { RetypeController, BASELINE_SCHEME } from './retypeController';
-import { installClaudeCodeHook } from './hookInstaller';
+import {
+  installClaudeCodeHook,
+  isClaudeCodeHookInstalled,
+} from './hookInstaller';
 import { matchesAny } from './core/glob';
 import { advanceBaseline, readBaseline } from './core/baselineStore';
 import { hasDebt } from './core/diff';
@@ -25,22 +28,16 @@ export function activate(context: vscode.ExtensionContext): void {
       },
     }),
 
-    vscode.commands.registerCommand('copyworkcode.enableWorkspace', async () => {
+    vscode.commands.registerCommand('copyworkcode.enableWorkspace', () => {
       const root = workspaceData.workspaceRoot();
       if (!root) {
         void vscode.window.showErrorMessage('CopyWorkCode: open a folder first.');
         return;
       }
-      await workspaceData.enableWorkspace(root);
+      workspaceData.enableWorkspace(root);
       startTracking(root, context);
-      const install = await vscode.window.showInformationMessage(
-        'CopyWorkCode enabled. Install the agent capture hook now? (One-time, user-wide.)',
-        'Install',
-        'Later'
-      );
-      if (install === 'Install') {
-        await installClaudeCodeHook(context);
-      }
+      // Deliberately not awaited: the offer must never block enabling.
+      void offerHookOnce(context);
     }),
 
     vscode.commands.registerCommand('copyworkcode.installAgentHook', () =>
@@ -69,6 +66,30 @@ export function activate(context: vscode.ExtensionContext): void {
   const root = workspaceData.workspaceRoot();
   if (root && workspaceData.isEnabled(root)) {
     startTracking(root, context);
+  }
+}
+
+const HOOK_DECLINED_KEY = 'copyworkcode.hookDeclined';
+
+/**
+ * One question, asked once ever: offer the capture hook when a workspace is
+ * enabled. Accepting installs directly (the click is the consent); declining
+ * is remembered user-wide and never re-asked. The palette command remains for
+ * anyone who changes their mind — everything else works without the hook,
+ * there's just no automatic capture feeding the review queue.
+ */
+async function offerHookOnce(context: vscode.ExtensionContext): Promise<void> {
+  if (context.globalState.get(HOOK_DECLINED_KEY)) return;
+  if (isClaudeCodeHookInstalled()) return;
+  const choice = await vscode.window.showInformationMessage(
+    'CopyWorkCode enabled. Record Claude Code edits automatically? This adds one hook entry to ~/.claude/settings.json.',
+    'Install',
+    'No Thanks'
+  );
+  if (choice === 'Install') {
+    await installClaudeCodeHook(context);
+  } else if (choice === 'No Thanks') {
+    await context.globalState.update(HOOK_DECLINED_KEY, true);
   }
 }
 

@@ -184,4 +184,6 @@ tamper-evidence machinery, and keeps the extension out of surveillance territory
   editor against a fixture workspace and drives a full retype review, section skip,
   file skip, and abort through the command layer.
 - `.copyworkcode/` — per-workspace runtime data (event queue, baselines, review state).
-  Never committed; the extension offers to gitignore it when enabling a workspace.
+  Never committed: enabling a workspace adds it to the repo-local exclude list
+  (`.git/info/exclude`), which hides it from `git status` without touching the project's
+  `.gitignore` or prompting anyone.
