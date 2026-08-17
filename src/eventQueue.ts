@@ -1,7 +1,8 @@
 import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { ChangeEvent } from './types';
-import { DATA_DIR, EVENTS_FILE, eventsPath } from './workspaceData';
+import { DATA_DIR, EVENTS_FILE, eventsPath } from './core/paths';
+import { parseEventChunk } from './core/eventLog';
 
 /**
  * Tails `.copyworkcode/events.jsonl` for the workspace: reads everything on
@@ -28,6 +29,13 @@ export class EventQueue implements vscode.Disposable {
     );
     this.watcher.onDidChange(() => this.readNew());
     this.watcher.onDidCreate(() => this.readNew());
+  }
+
+  /** Events for one file, newest last, optionally only after a given time. */
+  eventsFor(file: string, after?: string): ChangeEvent[] {
+    return this.events.filter(
+      (e) => e.file === file && (!after || e.timestamp > after)
+    );
   }
 
   private readNew(): void {
@@ -58,25 +66,15 @@ export class EventQueue implements vscode.Disposable {
     }
     this.offset = size;
 
-    const lines = (this.remainder + chunk).split('\n');
-    this.remainder = lines.pop() ?? '';
-
-    const fresh: ChangeEvent[] = [];
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      let event: ChangeEvent;
-      try {
-        event = JSON.parse(line);
-      } catch {
-        continue; // tolerate a corrupt line rather than losing the tail
-      }
-      if (!event.id || this.seen.has(event.id)) continue;
-      this.seen.add(event.id);
-      this.events.push(event);
-      fresh.push(event);
-    }
-    if (fresh.length > 0) {
-      this.emitter.fire(fresh);
+    const { events, remainder } = parseEventChunk(
+      chunk,
+      this.remainder,
+      this.seen
+    );
+    this.remainder = remainder;
+    if (events.length > 0) {
+      this.events.push(...events);
+      this.emitter.fire(events);
     }
   }
 

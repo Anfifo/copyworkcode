@@ -25,22 +25,93 @@
         "title": "CopyWorkCode: Install Agent Integration"
       },
       {
-        "command": "copyworkcode.reviewChange",
-        "title": "CopyWorkCode: Review Change"
+        "command": "copyworkcode.reviewFile",
+        "title": "CopyWorkCode: Review File by Retyping"
       },
       {
-        "command": "copyworkcode.skipChange",
-        "title": "CopyWorkCode: Skip Change"
+        "command": "copyworkcode.skipFile",
+        "title": "Skip (Mark Reviewed Without Typing)"
+      },
+      {
+        "command": "copyworkcode.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "copyworkcode.skipSection",
+        "title": "CopyWorkCode: Skip Current Section"
+      },
+      {
+        "command": "copyworkcode.fillNextLine",
+        "title": "CopyWorkCode: Fill Next Line"
+      },
+      {
+        "command": "copyworkcode.abortReview",
+        "title": "CopyWorkCode: Stop Review"
       }
     ],
     "views": {
       "explorer": [
         {
-          "id": "copyworkcode.unreviewed",
-          "name": "Unreviewed AI Changes"
+          "id": "copyworkcode.debt",
+          "name": "AI Changes to Review"
         }
       ]
     },
+    "menus": {
+      "view/title": [
+        {
+          "command": "copyworkcode.refresh",
+          "when": "view == copyworkcode.debt",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "copyworkcode.skipFile",
+          "when": "view == copyworkcode.debt && viewItem == copyworkcode.file"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "copyworkcode.skipFile",
+          "when": "false"
+        },
+        {
+          "command": "copyworkcode.reviewFile",
+          "when": "false"
+        },
+        {
+          "command": "copyworkcode.skipSection",
+          "when": "copyworkcode.reviewing"
+        },
+        {
+          "command": "copyworkcode.fillNextLine",
+          "when": "copyworkcode.reviewing"
+        },
+        {
+          "command": "copyworkcode.abortReview",
+          "when": "copyworkcode.reviewing"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "copyworkcode.skipSection",
+        "key": "alt+s",
+        "when": "copyworkcode.reviewing && editorTextFocus"
+      },
+      {
+        "command": "copyworkcode.fillNextLine",
+        "key": "alt+f",
+        "when": "copyworkcode.reviewing && editorTextFocus"
+      },
+      {
+        "command": "copyworkcode.abortReview",
+        "key": "shift+escape",
+        "when": "copyworkcode.reviewing && editorTextFocus"
+      }
+    ],
     "configuration": {
       "title": "CopyWorkCode",
       "properties": {
@@ -61,11 +132,15 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "pretest": "tsc -p tsconfig.test.json",
+    "test": "node --test \"out-test/test/*.test.js\"",
+    "test:integration": "tsc -p tsconfig.test.json && node out-test/test-integration/runTest.js"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.90.0",
+    "@vscode/test-electron": "^3.1.0",
     "typescript": "^5.5.0"
   }
 }

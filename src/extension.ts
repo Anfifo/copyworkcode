@@ -1,35 +1,34 @@
-import * as path from 'path';
+import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { ChangeEvent } from './types';
 import { EventQueue } from './eventQueue';
-import { ReviewState } from './reviewState';
-import { UnreviewedTreeProvider } from './unreviewedView';
+import { ReviewLog } from './reviewState';
+import { DebtTreeProvider } from './debtView';
+import { RetypeController, BASELINE_SCHEME } from './retypeController';
 import { installClaudeCodeHook } from './hookInstaller';
-import { matchesAny } from './glob';
+import { matchesAny } from './core/glob';
+import { advanceBaseline, readBaseline } from './core/baselineStore';
+import { hasDebt } from './core/diff';
 import * as workspaceData from './workspaceData';
 
-const BASE_SCHEME = 'copyworkcode-base';
-
 let queue: EventQueue | undefined;
-let state: ReviewState | undefined;
-let tree: UnreviewedTreeProvider | undefined;
-
-/** Pre-change file snapshots served to the diff view, keyed by event id. */
-const baseContents = new Map<string, string>();
+let log: ReviewLog | undefined;
+let tree: DebtTreeProvider | undefined;
+let retype: RetypeController | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
-    vscode.workspace.registerTextDocumentContentProvider(BASE_SCHEME, {
-      provideTextDocumentContent: (uri) =>
-        baseContents.get(uri.path.split('/')[1]) ?? '',
+    vscode.workspace.registerTextDocumentContentProvider(BASELINE_SCHEME, {
+      provideTextDocumentContent: (uri) => {
+        const root = workspaceData.workspaceRoot();
+        return root ? readBaseline(root, uri.query) ?? '' : '';
+      },
     }),
 
     vscode.commands.registerCommand('copyworkcode.enableWorkspace', async () => {
       const root = workspaceData.workspaceRoot();
       if (!root) {
-        void vscode.window.showErrorMessage(
-          'CopyWorkCode: open a folder first.'
-        );
+        void vscode.window.showErrorMessage('CopyWorkCode: open a folder first.');
         return;
       }
       await workspaceData.enableWorkspace(root);
@@ -48,15 +47,23 @@ export function activate(context: vscode.ExtensionContext): void {
       installClaudeCodeHook(context)
     ),
 
-    vscode.commands.registerCommand(
-      'copyworkcode.reviewChange',
-      (event: ChangeEvent) => reviewChange(event)
-    ),
+    vscode.commands.registerCommand('copyworkcode.reviewFile', (file: string) => {
+      const root = workspaceData.workspaceRoot();
+      if (root && retype) return retype.start(root, file);
+    }),
 
-    vscode.commands.registerCommand(
-      'copyworkcode.skipChange',
-      (event: ChangeEvent) => state?.setStatus(event.id, 'skipped')
-    )
+    vscode.commands.registerCommand('copyworkcode.skipFile', (item?: { resourceUri?: vscode.Uri }) => {
+      const file = item?.resourceUri?.fsPath;
+      const root = workspaceData.workspaceRoot();
+      if (!file || !root) return;
+      skipWithoutTyping(root, file, 'skipped');
+      tree?.refresh();
+    }),
+
+    vscode.commands.registerCommand('copyworkcode.refresh', () => tree?.refresh()),
+    vscode.commands.registerCommand('copyworkcode.skipSection', () => retype?.skipSection()),
+    vscode.commands.registerCommand('copyworkcode.fillNextLine', () => retype?.fillNextLine()),
+    vscode.commands.registerCommand('copyworkcode.abortReview', () => retype?.abort())
   );
 
   const root = workspaceData.workspaceRoot();
@@ -69,71 +76,63 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
   if (queue) return; // already tracking this window
 
   queue = new EventQueue(root);
-  state = new ReviewState(root);
-  tree = new UnreviewedTreeProvider(root, queue, state);
+  log = new ReviewLog(root);
+  retype = new RetypeController(log);
+  tree = new DebtTreeProvider(root, queue, log);
 
   context.subscriptions.push(
     queue,
-    state,
-    vscode.window.registerTreeDataProvider('copyworkcode.unreviewed', tree),
+    log,
+    retype,
+    vscode.window.registerTreeDataProvider('copyworkcode.debt', tree),
     queue.onDidAddEvents((events) => {
-      autoSkip(events);
+      autoSkip(root, events);
       tree?.refresh();
     }),
-    state.onDidChange(() => tree?.refresh())
+    log.onDidChange(() => tree?.refresh()),
+    retype.onDidFinish(() => tree?.refresh()),
+    vscode.workspace.onDidSaveTextDocument(() => tree?.refresh())
   );
 
   queue.start();
   tree.refresh();
 }
 
-function autoSkip(events: ChangeEvent[]): void {
+function autoSkip(root: string, events: ChangeEvent[]): void {
   const globs = vscode.workspace
     .getConfiguration('copyworkcode')
     .get<string[]>('autoSkipGlobs', []);
   if (globs.length === 0) return;
+  const done = new Set<string>();
   for (const event of events) {
-    if (matchesAny(event.file, globs)) {
-      state?.setStatus(event.id, 'auto-skipped');
-    }
+    if (done.has(event.file) || !matchesAny(event.file, globs)) continue;
+    done.add(event.file);
+    skipWithoutTyping(root, event.file, 'auto-skipped');
   }
 }
 
-async function reviewChange(event: ChangeEvent): Promise<void> {
-  const fileUri = vscode.Uri.file(event.file);
-
-  if (event.change?.kind === 'edit' && event.change.baseContent !== undefined) {
-    baseContents.set(event.id, event.change.baseContent);
-    const baseUri = vscode.Uri.from({
-      scheme: BASE_SCHEME,
-      path: `/${event.id}/${path.basename(event.file)}`,
-    });
-    await vscode.commands.executeCommand(
-      'vscode.diff',
-      baseUri,
-      fileUri,
-      `${path.basename(event.file)} (before change ↔ current)`
-    );
-  } else {
-    await vscode.window.showTextDocument(fileUri, { preview: true });
+/** Advance the baseline to the current content without a retype pass. */
+function skipWithoutTyping(
+  root: string,
+  file: string,
+  outcome: 'skipped' | 'auto-skipped'
+): void {
+  const baseline = readBaseline(root, file);
+  if (baseline === undefined) return;
+  let current = '';
+  try {
+    current = fs.readFileSync(file, 'utf8');
+  } catch {
+    // File deleted: advancing to empty acknowledges the deletion.
   }
-
-  // Placeholder until the guided retype flow exists: reviewing currently means
-  // reading the diff and confirming explicitly.
-  const action = await vscode.window.showInformationMessage(
-    'Guided retype is not implemented yet. Mark this change after reading it.',
-    'Mark Reviewed',
-    'Skip'
-  );
-  if (action === 'Mark Reviewed') {
-    state?.setStatus(event.id, 'reviewed');
-  } else if (action === 'Skip') {
-    state?.setStatus(event.id, 'skipped');
-  }
+  if (!hasDebt(baseline, current)) return; // nothing pending, nothing to log
+  advanceBaseline(root, file, current);
+  log?.add({ file, at: new Date().toISOString(), outcome });
 }
 
 export function deactivate(): void {
   queue = undefined;
-  state = undefined;
+  log = undefined;
   tree = undefined;
+  retype = undefined;
 }

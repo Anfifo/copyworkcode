@@ -6,6 +6,7 @@ CLAUDE.local.md
 # Node / VSCode extension build output
 node_modules/
 out/
+out-test/
 dist/
 *.vsix
 *.tsbuildinfo

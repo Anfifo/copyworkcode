@@ -1,8 +1,10 @@
 /**
  * A single AI-made (or suspected AI-made) change to a file.
  *
- * Events are append-only records in `.copyworkcode/events.jsonl`; review status
- * lives separately in the review state so the event log is never rewritten.
+ * Events are append-only records in `.copyworkcode/events.jsonl`. They are not
+ * the unit of review — review debt is the per-file diff against the baseline
+ * snapshot — but they annotate that diff: they mark which files changed at the
+ * hand of an agent and carry the intent pointers for those changes.
  */
 export interface ChangeEvent {
   /** Unique id, assigned by whichever detector produced the event. */
@@ -19,13 +21,7 @@ export interface ChangeEvent {
   toolName?: string;
   /** The change content, when the detector could capture it. */
   change?:
-    | {
-        kind: 'edit';
-        oldText: string;
-        newText: string;
-        /** Full file content from before the edit, when small enough to keep. */
-        baseContent?: string;
-      }
+    | { kind: 'edit'; oldText: string; newText: string }
     | { kind: 'write'; content: string };
   /**
    * Pointer for recovering the agent's stated intent later: transcript location
@@ -38,4 +34,14 @@ export interface ChangeEvent {
   };
 }
 
-export type ReviewStatus = 'unreviewed' | 'reviewed' | 'skipped' | 'auto-skipped';
+/** One completed review of a file's debt (typed out, or skipped some way). */
+export interface ReviewRecord {
+  /** Absolute path of the reviewed file. */
+  file: string;
+  /** ISO-8601 completion time. */
+  at: string;
+  outcome: 'typed' | 'skipped' | 'auto-skipped';
+  /** Section counts for typed reviews (a review can mix typing and skips). */
+  hunksTyped?: number;
+  hunksSkipped?: number;
+}

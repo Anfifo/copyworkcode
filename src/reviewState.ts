@@ -1,15 +1,16 @@
 import * as fs from 'fs';
 import * as vscode from 'vscode';
-import { ReviewStatus } from './types';
-import { statePath } from './workspaceData';
+import { ReviewRecord } from './types';
+import { statePath } from './core/paths';
 
 /**
- * Review status per change event, persisted to `.copyworkcode/state.json`.
- * Kept separate from the event log so events stay append-only and the log can
- * be regenerated or trimmed without losing review history.
+ * The personal review log, persisted to `.copyworkcode/state.json`: one record
+ * per completed review (typed or skipped), append-only. This is a private
+ * mirror for the user's own discipline — plain local JSON, no tamper-evidence
+ * by design (see design.md, "Review stats").
  */
-export class ReviewState implements vscode.Disposable {
-  private statuses = new Map<string, ReviewStatus>();
+export class ReviewLog implements vscode.Disposable {
+  private records: ReviewRecord[] = [];
   private emitter = new vscode.EventEmitter<void>();
   readonly onDidChange = this.emitter.event;
 
@@ -17,32 +18,38 @@ export class ReviewState implements vscode.Disposable {
     this.load();
   }
 
-  statusOf(eventId: string): ReviewStatus {
-    return this.statuses.get(eventId) ?? 'unreviewed';
-  }
-
-  setStatus(eventId: string, status: ReviewStatus): void {
-    this.statuses.set(eventId, status);
+  add(record: ReviewRecord): void {
+    this.records.push(record);
     this.save();
     this.emitter.fire();
+  }
+
+  lastFor(file: string): ReviewRecord | undefined {
+    for (let i = this.records.length - 1; i >= 0; i--) {
+      if (this.records[i].file === file) return this.records[i];
+    }
+    return undefined;
+  }
+
+  all(): readonly ReviewRecord[] {
+    return this.records;
   }
 
   private load(): void {
     try {
       const data = JSON.parse(fs.readFileSync(statePath(this.root), 'utf8'));
-      for (const [id, status] of Object.entries(data.statuses ?? {})) {
-        this.statuses.set(id, status as ReviewStatus);
+      if (Array.isArray(data.reviews)) {
+        this.records = data.reviews;
       }
     } catch {
-      // First run or unreadable state: everything defaults to unreviewed.
+      // First run or unreadable state: empty log.
     }
   }
 
   private save(): void {
-    const data = { statuses: Object.fromEntries(this.statuses) };
     fs.writeFileSync(
       statePath(this.root),
-      JSON.stringify(data, null, 2) + '\n'
+      JSON.stringify({ reviews: this.records }, null, 2) + '\n'
     );
   }
 

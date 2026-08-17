@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 'use strict';
 
-// PostToolUse hook installed into Claude Code. Receives the tool event as JSON
-// on stdin and appends a change event to <cwd>/.copyworkcode/events.jsonl.
+// Claude Code hook installed for both PreToolUse and PostToolUse on file
+// tools. Receives the tool event as JSON on stdin.
+//
+// - PreToolUse: snapshot the file's current content into
+//   <cwd>/.copyworkcode/baselines/ if no baseline exists yet, preserving the
+//   pre-change state the review diff needs (the file is about to change).
+// - PostToolUse: append a change event to <cwd>/.copyworkcode/events.jsonl.
 //
 // Two hard requirements shape this file:
 // - It only records in workspaces that opted in (the data directory exists),
@@ -13,34 +18,90 @@
 const fs = require('fs');
 const path = require('path');
 
-const FILE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
-// Full-file snapshots above this size are dropped; the diff text is still kept.
-const MAX_SNAPSHOT_BYTES = 512 * 1024;
+const FILE_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit']);
+// Content larger than this is dropped from events; occurrence is still kept.
+const MAX_CONTENT_BYTES = 512 * 1024;
+
+function targetFile(input) {
+  return input.file_path || input.notebook_path;
+}
+
+function withinLimit(text) {
+  return (
+    typeof text === 'string' && Buffer.byteLength(text, 'utf8') <= MAX_CONTENT_BYTES
+  );
+}
 
 function buildChange(toolName, input) {
-  if (toolName === 'Edit' || toolName === 'MultiEdit') {
-    const change = {
+  if (toolName === 'Edit') {
+    return {
       kind: 'edit',
-      oldText: input.old_str ?? input.old_string ?? '',
-      newText: input.new_str ?? input.new_string ?? '',
+      oldText: withinLimit(input.old_string) ? input.old_string : '',
+      newText: withinLimit(input.new_string) ? input.new_string : '',
     };
-    const base = input.file_text;
-    if (typeof base === 'string' && Buffer.byteLength(base, 'utf8') <= MAX_SNAPSHOT_BYTES) {
-      change.baseContent = base;
-    }
-    return change;
   }
   if (toolName === 'Write') {
-    const content = input.file_text ?? input.content;
-    if (typeof content !== 'string') return undefined;
     return {
       kind: 'write',
-      content:
-        Buffer.byteLength(content, 'utf8') <= MAX_SNAPSHOT_BYTES ? content : '',
+      content: withinLimit(input.content) ? input.content : '',
     };
   }
   // NotebookEdit and anything else: record the occurrence without content.
   return undefined;
+}
+
+// Baseline naming convention shared with the extension (see
+// src/core/baselineStore.ts): workspace-relative path, forward slashes,
+// percent-encoded into one flat file name.
+function baselinePath(cwd, file) {
+  const rel = path.relative(cwd, file);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) return undefined;
+  return path.join(
+    cwd,
+    '.copyworkcode',
+    'baselines',
+    encodeURIComponent(rel.replace(/\\/g, '/'))
+  );
+}
+
+function snapshotBaseline(cwd, file) {
+  const dest = baselinePath(cwd, file);
+  if (!dest) return;
+  let content = '';
+  try {
+    content = fs.readFileSync(file, 'utf8');
+  } catch {
+    // File doesn't exist yet (about to be created): baseline is empty.
+  }
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  try {
+    fs.writeFileSync(dest, content, { flag: 'wx' });
+  } catch {
+    // Baseline already exists — never overwrite the last-reviewed state.
+  }
+}
+
+function appendEvent(cwd, dataDir, payload, input, file) {
+  const event = {
+    id:
+      payload.tool_use_id ||
+      `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    timestamp: new Date().toISOString(),
+    source: 'agent-hook',
+    agent: 'claude-code',
+    file: path.resolve(cwd, file),
+    toolName: payload.tool_name,
+    change: buildChange(payload.tool_name, input),
+    intentRef: {
+      transcriptPath: payload.transcript_path,
+      sessionId: payload.session_id,
+      toolUseId: payload.tool_use_id,
+    },
+  };
+  fs.appendFileSync(
+    path.join(dataDir, 'events.jsonl'),
+    JSON.stringify(event) + '\n'
+  );
 }
 
 function main(raw) {
@@ -52,29 +113,15 @@ function main(raw) {
   if (!fs.existsSync(dataDir)) return; // workspace not enabled
 
   const input = payload.tool_input || {};
-  if (!input.file_path) return;
+  const file = targetFile(input);
+  if (!file) return;
+  const absolute = path.resolve(payload.cwd, file);
 
-  const event = {
-    id:
-      payload.tool_use_id ||
-      `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    timestamp: new Date().toISOString(),
-    source: 'agent-hook',
-    agent: 'claude-code',
-    file: input.file_path,
-    toolName: payload.tool_name,
-    change: buildChange(payload.tool_name, input),
-    intentRef: {
-      transcriptPath: payload.transcript_path,
-      sessionId: payload.session_id,
-      toolUseId: payload.tool_use_id,
-    },
-  };
-
-  fs.appendFileSync(
-    path.join(dataDir, 'events.jsonl'),
-    JSON.stringify(event) + '\n'
-  );
+  if (payload.hook_event_name === 'PreToolUse') {
+    snapshotBaseline(payload.cwd, absolute);
+  } else if (payload.hook_event_name === 'PostToolUse') {
+    appendEvent(payload.cwd, dataDir, payload, input, absolute);
+  }
 }
 
 let raw = '';
