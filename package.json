@@ -381,6 +381,11 @@
           "type": "boolean",
           "default": false,
           "description": "Mark the reviewed file read-only for the session, so only keystrokes that match the target can change it. Off by default: a review happens in a normal editor, and typing something other than the target is a real edit that lands in the file. Turn this on to make a review strictly reproduce the change, with mismatches inserting nothing."
+        },
+        "copyworkcode.ambientHighlight": {
+          "type": "boolean",
+          "default": true,
+          "description": "Mark the regions of any open file that changed since its review baseline, with a light dim, a gutter icon and a scrollbar mark. Works with no review session, so a file an agent touched reads as changed just by opening it. The file being reviewed is excluded — its own overlay says more."
         }
       }
     }
