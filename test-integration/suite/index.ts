@@ -495,6 +495,32 @@ export async function run(): Promise<void> {
   await config().update('animations', undefined, true);
   await settle();
 
+  // --- Keystrokes arriving faster than they can be answered ----------------
+  // Fired without awaiting each one, which pins down what a burst has to
+  // produce: matched keystrokes still edit nothing, and divergent ones land in
+  // the order they were typed, each at its own offset. Commands driven from the
+  // extension turn out to arrive sequentially, so this does not prove the
+  // gesture queue is load-bearing — it fixes the behaviour a burst must have,
+  // however the keystrokes get here.
+  const fast = await review('fast.ts');
+  await Promise.all([...'quick'].map((key) => type(key)));
+  await settle();
+  assert.equal(
+    fast.getText(),
+    'q1\nquick brown\n',
+    'a burst of matched keystrokes still edits nothing'
+  );
+  await Promise.all([...'ABC'].map((key) => type(key)));
+  await settle();
+  assert.equal(
+    fast.getText(),
+    'q1\nquickABC brown\n',
+    'a burst of divergent keystrokes lands in order, each at the right offset'
+  );
+  await exec('copyworkcode.skipSection');
+  await settle();
+  assert.equal(reviews().length, 19, 'the fast-typed review is recorded');
+
   // Typing must be back to normal once no review is active. Typed into a file
   // that was never a review editor, so this cannot pass or fail on whatever
   // the last section happened to leave focused.

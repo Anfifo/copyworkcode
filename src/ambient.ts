@@ -88,10 +88,16 @@ export class AmbientDebt implements vscode.Disposable {
       .getConfiguration('copyworkcode')
       .get<boolean>('ambientHighlight', true);
     const reviewed = this.reviewed();
+    const inDiff = diffSides();
     for (const editor of vscode.window.visibleTextEditors) {
       const document = editor.document;
       const skip =
-        !on || document === reviewed || document.uri.scheme !== 'file';
+        !on ||
+        document === reviewed ||
+        document.uri.scheme !== 'file' ||
+        // A diff editor already says which lines changed, in colour. Marking
+        // them again there would be a second opinion on top of a first one.
+        inDiff.has(document.uri.toString());
       editor.setDecorations(this.changed, skip ? [] : this.rangesFor(document));
     }
   }
@@ -146,3 +152,18 @@ export class AmbientDebt implements vscode.Disposable {
 }
 
 const MAX_CHARS = 400_000;
+
+/** URIs currently open as one side of a diff. A `TextEditor` does not say
+ * whether it is part of one, but the tab list does. */
+function diffSides(): Set<string> {
+  const sides = new Set<string>();
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      if (tab.input instanceof vscode.TabInputTextDiff) {
+        sides.add(tab.input.original.toString());
+        sides.add(tab.input.modified.toString());
+      }
+    }
+  }
+  return sides;
+}

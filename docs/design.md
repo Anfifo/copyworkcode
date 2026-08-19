@@ -256,6 +256,13 @@ target already has and leave the reviewer two characters from a target they were
 from. Once a section is handed over, input takes the editor's normal path and every
 convenience comes back with it — completions, auto-close, auto-indent, format-on-type.
 
+Gestures run one at a time, in arrival order. Each of them reads a section's position, awaits
+something, then writes it back, so two overlapping would decide from the same position and the
+second would act on a stale offset. Whether the editor can really deliver a keystroke while the
+previous one is still being answered is deliberately not depended on: commands driven from a
+test arrive sequentially, so the suite cannot demonstrate the overlap, and the queue is cheap
+enough to make the guarantee rather than assume it.
+
 Keystrokes are still intercepted with a `type` command override. That is what guarantees
 completions and snippets cannot type code on the reviewer's behalf *while a character is being
 matched* — the one place where they would defeat the entire point. Enter and Tab are
@@ -263,6 +270,11 @@ dispatched as editor commands rather than `type` input, so both are rebound, sco
 moment a character is actually being matched: Enter routes through the engine so whitespace
 snaps, and Tab fills the next word. Everywhere else, including inside a section that was
 handed over, they are Enter and Tab.
+
+The override is held only while the reviewed file is the active editor. It is a global
+command — every keystroke in the window would otherwise take a round trip through the
+extension just to be handed back to the editor — and a review outlives its tab, so it can be
+the active editor for a small fraction of the time it exists.
 
 `copyworkcode.lockDuringReview` (default off) brings the old behaviour back for anyone who
 wants a review to reproduce a change strictly: the review editor is marked read-only for the

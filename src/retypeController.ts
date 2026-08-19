@@ -172,6 +172,8 @@ export class RetypeController implements vscode.Disposable {
   /** Clock of the last structural notice, to keep them from stacking up when a
    * file is being rewritten repeatedly underneath the review. */
   private lastNote = 0;
+  /** Tail of the gesture queue — see `serialize`. */
+  private gestures: Promise<unknown> = Promise.resolve();
 
   constructor(
     private log: ReviewLog,
@@ -363,11 +365,36 @@ export class RetypeController implements vscode.Disposable {
   // --- typing -----------------------------------------------------------------
 
   /**
+   * Run one gesture at a time, in arrival order.
+   *
+   * Every gesture here reads a section's position, awaits, then writes it back,
+   * so two of them overlapping would decide from the same position and the
+   * second would act on a stale offset. Whether the editor can actually deliver
+   * a keystroke while the previous one is still being answered is not something
+   * this code should depend on either way: commands driven from the extension
+   * arrive sequentially, so the test suite cannot demonstrate the overlap, and
+   * the guarantee is cheap enough to make here rather than assume. Queueing
+   * costs nothing when nothing is pending, which is the usual case.
+   *
+   * Only the outermost entry points go through this: nesting one inside another
+   * would wait for itself.
+   */
+  private serialize<T>(work: () => Promise<T>): Promise<T> {
+    const next = this.gestures.then(work, work);
+    this.gestures = next.catch(() => undefined);
+    return next;
+  }
+
+  /**
    * Every printable keystroke in the window while a review is live. Only the
    * ones landing exactly where a section owes its next character are checked;
    * everything else is the editor's own business and is passed through.
    */
-  private async onType(args: { text: string }): Promise<void> {
+  private onType(args: { text: string }): Promise<void> {
+    return this.serialize(() => this.handleType(args));
+  }
+
+  private async handleType(args: { text: string }): Promise<void> {
     const focus = this.focus();
     if (!focus || !focus.guided) {
       await vscode.commands.executeCommand('default:type', args);
@@ -452,13 +479,14 @@ export class RetypeController implements vscode.Disposable {
   /** Enter is dispatched as an editor command, not `type` input, so it is
    * rebound while guidance is on to route through the engine and snap the
    * target's whitespace. Everywhere else it keeps its normal behaviour. */
-  async typeEnter(): Promise<void> {
-    const focus = this.focus();
-    if (!focus?.guided) {
-      await vscode.commands.executeCommand('default:type', { text: '\n' });
-      return;
-    }
-    await this.onType({ text: '\n' });
+  typeEnter(): Promise<void> {
+    return this.serialize(async () => {
+      if (!this.focus()?.guided) {
+        await vscode.commands.executeCommand('default:type', { text: '\n' });
+        return;
+      }
+      await this.handleType({ text: '\n' });
+    });
   }
 
   /**
@@ -468,45 +496,53 @@ export class RetypeController implements vscode.Disposable {
    * since everything to the right is text still owed. Both keep their normal
    * behaviour whenever guidance is off.
    */
-  async fillNextWord(): Promise<void> {
-    const focus = this.focus();
-    if (!focus?.guided) {
-      await vscode.commands.executeCommand('cursorRight');
-      return;
-    }
-    await this.fill(focus.section, (engine) => engine.fillWord());
+  fillNextWord(): Promise<void> {
+    return this.serialize(async () => {
+      const focus = this.focus();
+      if (!focus?.guided) {
+        await vscode.commands.executeCommand('cursorRight');
+        return;
+      }
+      await this.fill(focus.section, (engine) => engine.fillWord());
+    });
   }
 
-  async fillNextLine(): Promise<void> {
-    const section = this.activeSection();
-    if (!section) return;
-    if (section.kind === 'confirm') {
-      await this.claim(section, 'confirmed');
-      return;
-    }
-    await this.fill(section, (engine) => engine.fillLine());
+  fillNextLine(): Promise<void> {
+    return this.serialize(async () => {
+      const section = this.activeSection();
+      if (!section) return;
+      if (section.kind === 'confirm') {
+        await this.claim(section, 'confirmed');
+        return;
+      }
+      await this.fill(section, (engine) => engine.fillLine());
+    });
   }
 
   /** Fill in the whole section and move on, recorded as skipped. */
-  async skipSection(): Promise<void> {
-    const section = this.activeSection();
-    if (!section) return;
-    if (section.kind === 'confirm') {
-      await this.claim(section, 'confirmed');
-      return;
-    }
-    const from = section.position;
-    section.position = section.target.length;
-    section.touched = false;
-    this.animateRun(section, from, section.position, 'wipe');
-    await this.settle(section);
+  skipSection(): Promise<void> {
+    return this.serialize(async () => {
+      const section = this.activeSection();
+      if (!section) return;
+      if (section.kind === 'confirm') {
+        await this.claim(section, 'confirmed');
+        return;
+      }
+      const from = section.position;
+      section.position = section.target.length;
+      section.touched = false;
+      this.animateRun(section, from, section.position, 'wipe');
+      await this.settle(section);
+    });
   }
 
   /** Acknowledge a deletion-only section (the lens button's command). */
-  async confirmSection(): Promise<void> {
-    const section = this.activeSection();
-    if (!section || section.kind !== 'confirm') return;
-    await this.claim(section, 'confirmed');
+  confirmSection(): Promise<void> {
+    return this.serialize(async () => {
+      const section = this.activeSection();
+      if (!section || section.kind !== 'confirm') return;
+      await this.claim(section, 'confirmed');
+    });
   }
 
   private async fill(
@@ -626,11 +662,13 @@ export class RetypeController implements vscode.Disposable {
    * the file, and the file's debt is recomputed from its content the next time
    * the queue is read.
    */
-  async abort(message?: string): Promise<void> {
-    if (!this.session) return;
-    await this.stop(
-      message ?? 'review stopped. Your edits stay in the file; the debt stays too.'
-    );
+  abort(message?: string): Promise<void> {
+    return this.serialize(async () => {
+      if (!this.session) return;
+      await this.stop(
+        message ?? 'review stopped. Your edits stay in the file; the debt stays too.'
+      );
+    });
   }
 
   private async stop(message: string): Promise<void> {
@@ -642,6 +680,12 @@ export class RetypeController implements vscode.Disposable {
     void vscode.window.setStatusBarMessage(`CopyWorkCode: ${message}`, 6000);
   }
 
+  /** The finish as a gesture — the command, the button and the status bar. The
+   * internal path into `finish` is already inside a queued gesture. */
+  finishReview(): Promise<void> {
+    return this.serialize(() => this.finish());
+  }
+
   /**
    * Every section is accounted for. The document is saved and its baseline
    * advanced to what the buffer holds now — which, with real edits in play, is
@@ -649,7 +693,7 @@ export class RetypeController implements vscode.Disposable {
    * the baseline records what was reviewed and accepted, so anything they
    * rewrote is not handed straight back as debt on the next pass.
    */
-  async finish(): Promise<void> {
+  private async finish(): Promise<void> {
     const s = this.session;
     if (!s) return;
     const owed = s.sections.length - claimedCount(s.sections);

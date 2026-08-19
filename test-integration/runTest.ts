@@ -65,6 +65,10 @@ async function main(): Promise<void> {
   // Two sections claimed out of order, starting with the second.
   fs.writeFileSync(path.join(fixture, 'roam.ts'), 'r1\none\nr3\ntwo\nr5\n');
   fs.writeFileSync(path.join(baselines, 'roam.ts'), 'r1\nr3\nr5\n');
+  // Keystrokes fired without waiting for the extension to answer the previous
+  // one, which is how the editor really dispatches them.
+  fs.writeFileSync(path.join(fixture, 'fast.ts'), 'q1\nquick brown\n');
+  fs.writeFileSync(path.join(baselines, 'fast.ts'), 'q1\n');
   // Reviewed with the read-only lock option turned on.
   fs.writeFileSync(path.join(fixture, 'locked.ts'), 'l1\nlocked\n');
   fs.writeFileSync(path.join(baselines, 'locked.ts'), 'l1\n');
@@ -107,9 +111,9 @@ async function main(): Promise<void> {
   const state = JSON.parse(
     fs.readFileSync(path.join(fixture, '.copyworkcode', 'state.json'), 'utf8')
   );
-  if (state.reviews.length !== 18) {
+  if (state.reviews.length !== 19) {
     throw new Error(
-      `expected 18 review records in the fixture, found ${state.reviews.length}`
+      `expected 19 review records in the fixture, found ${state.reviews.length}`
     );
   }
   const advanced = fs.readFileSync(path.join(baselines, 'sample.ts'), 'utf8');

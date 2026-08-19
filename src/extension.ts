@@ -73,7 +73,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('copyworkcode.fillNextLine', () => retype?.fillNextLine()),
     vscode.commands.registerCommand('copyworkcode.fillNextWord', () => retype?.fillNextWord()),
     vscode.commands.registerCommand('copyworkcode.abortReview', () => retype?.abort()),
-    vscode.commands.registerCommand('copyworkcode.finishReview', () => retype?.finish()),
+    vscode.commands.registerCommand('copyworkcode.finishReview', () =>
+      retype?.finishReview()
+    ),
     vscode.commands.registerCommand('copyworkcode.typeEnter', () => retype?.typeEnter()),
     vscode.commands.registerCommand('copyworkcode.focusSection', (offset: number) =>
       retype?.focusSection(offset)
