@@ -88,6 +88,12 @@
         "icon": "$(stop-circle)"
       },
       {
+        "command": "copyworkcode.finishReview",
+        "title": "Finish Review",
+        "category": "CopyWorkCode",
+        "icon": "$(check-all)"
+      },
+      {
         "command": "copyworkcode.confirmSection",
         "title": "Confirm Deleted Section",
         "category": "CopyWorkCode"
@@ -102,6 +108,16 @@
         "title": "Show Review Diff",
         "category": "CopyWorkCode",
         "icon": "$(diff)"
+      },
+      {
+        "command": "copyworkcode.reviewNextFile",
+        "title": "Review Next File",
+        "category": "CopyWorkCode"
+      },
+      {
+        "command": "copyworkcode.focusSection",
+        "title": "Start Reviewing This Section",
+        "category": "CopyWorkCode"
       }
     ],
     "viewsContainers": {
@@ -145,6 +161,11 @@
     ],
     "menus": {
       "editor/title": [
+        {
+          "command": "copyworkcode.finishReview",
+          "when": "copyworkcode.reviewing && copyworkcode.reviewComplete",
+          "group": "navigation@0"
+        },
         {
           "command": "copyworkcode.showReviewDiff",
           "when": "copyworkcode.reviewing",
@@ -242,6 +263,18 @@
         {
           "command": "copyworkcode.showReviewDiff",
           "when": "copyworkcode.reviewing"
+        },
+        {
+          "command": "copyworkcode.finishReview",
+          "when": "copyworkcode.reviewing"
+        },
+        {
+          "command": "copyworkcode.reviewNextFile",
+          "when": "copyworkcode.enabled"
+        },
+        {
+          "command": "copyworkcode.focusSection",
+          "when": "false"
         }
       ]
     },
@@ -249,32 +282,37 @@
       {
         "command": "copyworkcode.skipSection",
         "key": "alt+s",
-        "when": "copyworkcode.reviewing && copyworkcode.reviewEditorFocused && editorTextFocus"
+        "when": "copyworkcode.reviewing && copyworkcode.sectionActive && copyworkcode.reviewEditorFocused && editorTextFocus"
       },
       {
         "command": "copyworkcode.fillNextLine",
         "key": "alt+f",
-        "when": "copyworkcode.reviewing && copyworkcode.reviewEditorFocused && editorTextFocus"
+        "when": "copyworkcode.reviewing && copyworkcode.sectionActive && copyworkcode.reviewEditorFocused && editorTextFocus"
       },
       {
         "command": "copyworkcode.fillNextWord",
         "key": "right",
-        "when": "copyworkcode.reviewing && copyworkcode.reviewEditorFocused && editorTextFocus && !suggestWidgetVisible"
+        "when": "copyworkcode.guided && editorTextFocus && !suggestWidgetVisible"
+      },
+      {
+        "command": "copyworkcode.fillNextWord",
+        "key": "tab",
+        "when": "copyworkcode.guided && editorTextFocus && !suggestWidgetVisible && !inlineSuggestionVisible"
+      },
+      {
+        "command": "copyworkcode.typeEnter",
+        "key": "enter",
+        "when": "copyworkcode.guided && editorTextFocus && !suggestWidgetVisible"
+      },
+      {
+        "command": "copyworkcode.finishReview",
+        "key": "alt+enter",
+        "when": "copyworkcode.reviewing && copyworkcode.reviewComplete && editorTextFocus"
       },
       {
         "command": "copyworkcode.abortReview",
         "key": "shift+escape",
         "when": "copyworkcode.reviewing && editorTextFocus"
-      },
-      {
-        "command": "copyworkcode.typeTab",
-        "key": "tab",
-        "when": "copyworkcode.reviewing && copyworkcode.reviewEditorFocused && editorTextFocus"
-      },
-      {
-        "command": "copyworkcode.typeEnter",
-        "key": "enter",
-        "when": "copyworkcode.reviewing && copyworkcode.reviewEditorFocused && editorTextFocus"
       },
       {
         "command": "copyworkcode.jumpToReview",
@@ -285,6 +323,11 @@
         "command": "copyworkcode.showReviewDiff",
         "key": "alt+d",
         "when": "copyworkcode.reviewing && editorTextFocus"
+      },
+      {
+        "command": "copyworkcode.reviewNextFile",
+        "key": "alt+n",
+        "when": "copyworkcode.enabled && editorTextFocus"
       }
     ],
     "configuration": {
@@ -327,6 +370,17 @@
           "default": false,
           "scope": "application",
           "description": "Record edits made by Claude Code, so changed files appear in the review queue automatically. Turning this on adds one hook entry to ~/.claude/settings.json; turning it off removes that entry again. The hook only records in workspaces where CopyWorkCode is enabled, and nothing is sent anywhere. Applies to every workspace, because the file it edits is shared by all of them."
+        },
+        "copyworkcode.freeEditAfter": {
+          "type": "number",
+          "minimum": 1,
+          "default": 10,
+          "description": "Consecutive characters that don't match the target before the review concludes you are writing your own code here. That section stops being matched and is recorded as edited; guidance resumes on the next one. A high number effectively keeps guidance on for good."
+        },
+        "copyworkcode.lockDuringReview": {
+          "type": "boolean",
+          "default": false,
+          "description": "Mark the reviewed file read-only for the session, so only keystrokes that match the target can change it. Off by default: a review happens in a normal editor, and typing something other than the target is a real edit that lands in the file. Turn this on to make a review strictly reproduce the change, with mismatches inserting nothing."
         }
       }
     }

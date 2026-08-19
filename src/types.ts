@@ -46,4 +46,6 @@ export interface ReviewRecord {
   hunksSkipped?: number;
   /** Deletion-only sections acknowledged with one action. */
   hunksConfirmed?: number;
+  /** Sections the reviewer wrote themselves instead of reproducing. */
+  hunksEdited?: number;
 }

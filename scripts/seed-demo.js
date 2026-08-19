@@ -7,6 +7,10 @@
 // it in an extension development host and the review tree is already
 // populated, no agent session needed.
 //
+// Every file here is also a place to try the edit side of a review: type
+// something other than the target and it lands in the file, and ten characters
+// of your own in a row hand that section over.
+//
 // Run directly with `npm run demo:seed`, or use the "Run Extension (Demo)"
 // launch configuration, which seeds and opens it in one go. Re-running the
 // script resets every file to its start state.
@@ -47,7 +51,8 @@ seed(
   ].join('\n')
 );
 
-// Several separated sections in one file — walks top to bottom.
+// Several separated sections in one file — the flow leads from one to the next
+// as they are claimed, but any of them can be clicked into and typed first.
 seed(
   'shopping-cart.ts',
   [

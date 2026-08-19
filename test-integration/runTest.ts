@@ -6,7 +6,10 @@ import { runTests } from '@vscode/test-electron';
 
 /**
  * Boots a real editor instance against a fixture workspace that already has
- * baselines and pending debt, then runs the suite in the extension host.
+ * baselines and pending debt, then runs the suite in the extension host. One
+ * file per interesting review case, including the ones that only exist because
+ * the review happens in an editable buffer: diverging from the target, erasing,
+ * and something else writing to the file mid-review.
  */
 async function main(): Promise<void> {
   // Inherited from editor-integrated terminals; it makes the spawned test
@@ -35,8 +38,8 @@ async function main(): Promise<void> {
   // Review command fired twice for one gesture (double-click).
   fs.writeFileSync(path.join(fixture, 'race.ts'), 'r1\nr2\n');
   fs.writeFileSync(path.join(baselines, 'race.ts'), 'r1\n');
-  // Indented section typed with the tab key.
-  fs.writeFileSync(path.join(fixture, 'tabbed.ts'), 'f\n\tx\n');
+  // Indented section part-filled with the tab key and part typed.
+  fs.writeFileSync(path.join(fixture, 'tabbed.ts'), 'f\n\tx = y;\n');
   fs.writeFileSync(path.join(baselines, 'tabbed.ts'), 'f\n');
   // Multi-line section typed with the enter key between lines.
   fs.writeFileSync(path.join(fixture, 'entered.ts'), 'start\na\nb\n');
@@ -44,6 +47,27 @@ async function main(): Promise<void> {
   // File reloaded from disk mid-review.
   fs.writeFileSync(path.join(fixture, 'reload.ts'), 'a\nb\n');
   fs.writeFileSync(path.join(baselines, 'reload.ts'), 'a\n');
+  // Buffer replaced wholesale mid-review: the sections are re-derived.
+  fs.writeFileSync(path.join(fixture, 'replaced.ts'), 'p1\np2\n');
+  fs.writeFileSync(path.join(baselines, 'replaced.ts'), 'p1\n');
+  // Ten unmatched characters in a row: the section is handed over.
+  fs.writeFileSync(path.join(fixture, 'diverge.ts'), 'd1\nORIGINAL\n');
+  fs.writeFileSync(path.join(baselines, 'diverge.ts'), 'd1\n');
+  // Typed, erased with backspace, then typed to the end.
+  fs.writeFileSync(path.join(fixture, 'backspace.ts'), 'b1\nbeta\n');
+  fs.writeFileSync(path.join(baselines, 'backspace.ts'), 'b1\n');
+  // Written to from outside the review flow while the review is live.
+  fs.writeFileSync(
+    path.join(fixture, 'foreign.ts'),
+    'f1\nalpha\nf3\nbeta\nf5\n'
+  );
+  fs.writeFileSync(path.join(baselines, 'foreign.ts'), 'f1\nf3\nf5\n');
+  // Two sections claimed out of order, starting with the second.
+  fs.writeFileSync(path.join(fixture, 'roam.ts'), 'r1\none\nr3\ntwo\nr5\n');
+  fs.writeFileSync(path.join(baselines, 'roam.ts'), 'r1\nr3\nr5\n');
+  // Reviewed with the read-only lock option turned on.
+  fs.writeFileSync(path.join(fixture, 'locked.ts'), 'l1\nlocked\n');
+  fs.writeFileSync(path.join(baselines, 'locked.ts'), 'l1\n');
   // Review abandoned by closing the review editor.
   fs.writeFileSync(path.join(fixture, 'closed.ts'), 'c1\nc2\n');
   fs.writeFileSync(path.join(baselines, 'closed.ts'), 'c1\n');
@@ -83,9 +107,9 @@ async function main(): Promise<void> {
   const state = JSON.parse(
     fs.readFileSync(path.join(fixture, '.copyworkcode', 'state.json'), 'utf8')
   );
-  if (state.reviews.length !== 12) {
+  if (state.reviews.length !== 18) {
     throw new Error(
-      `expected 12 review records in the fixture, found ${state.reviews.length}`
+      `expected 18 review records in the fixture, found ${state.reviews.length}`
     );
   }
   const advanced = fs.readFileSync(path.join(baselines, 'sample.ts'), 'utf8');

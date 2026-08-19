@@ -12,10 +12,11 @@ import { ReviewLog } from './reviewState';
  * review themselves.
  *
  * Each row leads with the change size, because that is what the reviewer picks
- * by, and carries the colour of the change on its icon: a tree row cannot
- * colour its own text, so the icon does that work. The view header names what
- * the rows are being compared against, so a switched baseline is never a
- * silent change, and the container badge carries the pending count.
+ * by, then the coverage of a review live on that file, and carries the colour of
+ * the change on its icon: a tree row cannot colour its own text, so the icon
+ * does that work. The view header names what the rows are being compared
+ * against, so a switched baseline is never a silent change, and the container
+ * badge carries the pending count.
  */
 export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
   private emitter = new vscode.EventEmitter<void>();
@@ -62,11 +63,7 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
 
     const bits = [`+${added} −${removed}`];
     if (progress) {
-      bits.push(
-        progress.active
-          ? 'in review'
-          : `parked ${progress.index + 1}/${progress.total}`
-      );
+      bits.push(`reviewing ${progress.claimed}/${progress.total}`);
     }
     if (events > 0) {
       bits.push(`${events} edit(s)`);
@@ -103,9 +100,7 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
     }
     if (progress) {
       lines.push(
-        progress.active
-          ? `Under review now, at section ${progress.index + 1} of ${progress.total}.`
-          : `Parked at section ${progress.index + 1} of ${progress.total} — opening it resumes there.`
+        `Under review now: ${progress.claimed} of ${progress.total} section(s) claimed.`
       );
     }
     if (events > 0) {

@@ -172,13 +172,21 @@ function shift(section: Section, change: TextChange): void {
   );
   // Anything that reached into text the reviewer had already covered means the
   // claim only holds up to where the edit began — the characters after it are
-  // not the ones that were read and reproduced any more. Everything else just
-  // rides along: an edit ahead of the position leaves it where it was, and an
-  // edit entirely before the section shifts it with the section.
+  // not the ones that were read and reproduced any more.
+  //
+  // Otherwise the position rides along, and text inserted *at* it counts as
+  // covered. That tie is what makes a reviewer's own divergent character behave:
+  // the flow passes the keystroke through to the buffer, and remapping alone
+  // steps the position over it, with no second pass to get the ordering of the
+  // insertion and the change event wrong. The cost is that a formatter inserting
+  // at exactly the cursor is taken as covered too — the one offset where that is
+  // a fair guess, since it is where the reviewer is typing.
   const claimed =
     change.to > start && change.from < typed
       ? Math.max(change.from, section.start)
-      : mapOffset(typed, change, delta, change.from);
+      : typed >= change.from
+        ? typed + delta
+        : typed;
   section.position = Math.max(0, claimed - section.start);
 }
 

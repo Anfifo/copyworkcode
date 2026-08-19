@@ -147,19 +147,30 @@ test('a change after a section leaves it alone', () => {
   );
 });
 
-test('typing a divergent character inside the untyped remainder re-slices it', () => {
+test('a divergent character typed at the position is covered by it', () => {
   const before = 'aaa\nTARGET\n';
   const sections = buildSections('aaa\n', before);
   sections[0].position = 3; // "TAR" claimed
 
-  // The reviewer types "x" at the typing position: the editor inserts it, and
-  // the section grows to cover it. Nothing before the position moved, so the
-  // typed prefix survives; the new character lands on the untyped side, which
-  // is what the controller then steps over deliberately.
+  // The reviewer types "x" where the target wanted "G": the flow passes the
+  // keystroke through to the buffer, the section grows to cover it, and the
+  // position steps over it — remapping alone has to do that, or the character
+  // they just typed would stay marked as text they still owe.
   remap(sections, before, [insert(sections[0].start + 3, 'x')]);
 
   assert.equal(sections[0].target, 'TARxGET\n');
-  assert.equal(sections[0].position, 3);
+  assert.equal(sections[0].position, 4);
+});
+
+test('a character typed ahead of the position leaves the position alone', () => {
+  const before = 'aaa\nTARGET\n';
+  const sections = buildSections('aaa\n', before);
+  sections[0].position = 2;
+
+  remap(sections, before, [insert(sections[0].start + 5, 'x')]);
+
+  assert.equal(sections[0].target, 'TARGExT\n');
+  assert.equal(sections[0].position, 2);
 });
 
 test('an edit inside text already typed rewinds the position to the edit', () => {

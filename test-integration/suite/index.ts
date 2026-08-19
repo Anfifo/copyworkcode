@@ -4,403 +4,505 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 
 /**
- * End-to-end checks inside a live extension host: activation, the guided
- * retype flow driven by simulated keystrokes, section skip, whole-file skip,
- * word fills, abort, session teardown when the review editor closes, parking a
- * review to start another file and resuming it, changing the animation level
- * mid-review, and the git comparison mode.
+ * End-to-end checks inside a live extension host. The review runs in a normal
+ * editable editor, so most of what is worth checking is what happens when the
+ * buffer changes underneath it: diverging from the target one character at a
+ * time, diverging far enough that the section is handed over, erasing with
+ * backspace, something else writing to the file mid-review, and the buffer being
+ * replaced outright. Alongside those, the plain flow — typing, fills, skips,
+ * deletion confirms, free roam across sections, the read-only lock option, and
+ * the git comparison mode.
+ *
  * Runs sequentially — one review is live at a time by design.
  */
 export async function run(): Promise<void> {
   const ws = vscode.workspace.workspaceFolders![0].uri.fsPath;
+  const file = (name: string) => path.join(ws, name);
   const baselineOf = (name: string) =>
     fs.readFileSync(
       path.join(ws, '.copyworkcode', 'baselines', encodeURIComponent(name)),
       'utf8'
     );
+  const onDisk = (name: string) => fs.readFileSync(file(name), 'utf8');
   const stateFile = path.join(ws, '.copyworkcode', 'state.json');
-  const settle = () => new Promise((resolve) => setTimeout(resolve, 300));
+  const reviews = () =>
+    JSON.parse(fs.readFileSync(stateFile, 'utf8')).reviews as {
+      file: string;
+      outcome: string;
+      hunksTyped?: number;
+      hunksSkipped?: number;
+      hunksConfirmed?: number;
+      hunksEdited?: number;
+    }[];
+  const settle = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
 
   const ext = vscode.extensions.all.find((e) => e.id.endsWith('.copyworkcode'));
   assert.ok(ext, 'extension is present in the host');
   await ext.activate();
   assert.ok(ext.isActive, 'extension activates');
 
-  const type = (text: string) =>
-    vscode.commands.executeCommand('type', { text });
+  const exec = (command: string, ...args: unknown[]) =>
+    vscode.commands.executeCommand(command, ...args);
+  const type = (text: string) => exec('type', { text });
+  /** Type the visible characters of a target: whitespace snaps on its own. */
+  const typeAll = async (text: string) => {
+    for (const key of text) await type(key);
+  };
+  const review = async (name: string) => {
+    await exec('copyworkcode.reviewFile', file(name));
+    await settle();
+    const document = vscode.workspace.textDocuments.find(
+      (d) => d.uri.fsPath === file(name)
+    );
+    assert.ok(document, `review of ${name} opened the file`);
+    return document;
+  };
+  const editorOf = (name: string) => {
+    const editor = vscode.window.visibleTextEditors.find(
+      (e) => e.document.uri.fsPath === file(name)
+    );
+    assert.ok(editor, `${name} is showing in an editor`);
+    return editor;
+  };
+  /** Put the cursor where a reviewer clicking there would put it. */
+  const clickAt = async (name: string, offset: number) => {
+    const editor = editorOf(name);
+    const at = editor.document.positionAt(offset);
+    editor.selection = new vscode.Selection(at, at);
+    await settle(150);
+  };
+  /** Claim whatever is left of a review, however many sections that is. */
+  const claimRest = async () => {
+    for (let i = 0; i < 5; i++) {
+      await exec('copyworkcode.skipSection');
+      await settle(120);
+    }
+    await exec('copyworkcode.finishReview');
+    await settle();
+  };
 
-  // --- Full retype review ---------------------------------------------------
-  const sample = path.join(ws, 'sample.ts');
-  await vscode.commands.executeCommand('copyworkcode.reviewFile', sample);
-
-  const doc = vscode.workspace.textDocuments.find(
-    (d) => d.uri.fsPath === sample
-  );
-  assert.ok(doc, 'review opened the file');
+  // --- The plain flow: type the section, the buffer never changes ------------
+  const sample = await review('sample.ts');
   assert.equal(
-    doc.getText(),
+    sample.getText(),
     'line1\nline2\nline3\n',
     'the buffer keeps its full content at review start'
   );
-  assert.equal(doc.isDirty, false, 'starting a review never dirties the file');
+  assert.equal(sample.isDirty, false, 'starting a review never dirties the file');
 
-  await type('x'); // wrong key
+  await typeAll('line2');
   assert.equal(
-    doc.getText(),
+    sample.getText(),
     'line1\nline2\nline3\n',
-    'mismatched keystroke changes nothing'
+    'typing the target leaves the content byte-identical'
   );
+  assert.equal(sample.isDirty, false, 'a matched review never dirties the file');
+  assert.equal(baselineOf('sample.ts'), 'line1\nline2\nline3\n');
+  assert.equal(reviews().length, 1);
+  assert.equal(reviews()[0].outcome, 'typed');
+  assert.equal(reviews()[0].hunksTyped, 1);
 
-  for (const key of ['l', 'i', 'n', 'e', '2']) {
-    await type(key);
-  }
-  assert.equal(
-    doc.getText(),
-    'line1\nline2\nline3\n',
-    'typing the section leaves the content byte-identical'
-  );
-  assert.equal(doc.isDirty, false, 'a completed review never dirties the file');
-  assert.equal(
-    baselineOf('sample.ts'),
-    'line1\nline2\nline3\n',
-    'baseline advanced after typed review'
-  );
-
-  let state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-  assert.equal(state.reviews.length, 1);
-  assert.equal(state.reviews[0].outcome, 'typed');
-  assert.equal(state.reviews[0].hunksTyped, 1);
-
-  // --- Skip section ----------------------------------------------------------
-  const skipSection = path.join(ws, 'skipsection.ts');
-  await vscode.commands.executeCommand('copyworkcode.reviewFile', skipSection);
-  await vscode.commands.executeCommand('copyworkcode.skipSection');
-  assert.equal(
-    fs.readFileSync(skipSection, 'utf8'),
-    'a\nb\n',
-    'skipping a section leaves the content untouched'
-  );
+  // --- Skip a section --------------------------------------------------------
+  await review('skipsection.ts');
+  await exec('copyworkcode.skipSection');
+  await settle();
+  assert.equal(onDisk('skipsection.ts'), 'a\nb\n', 'skipping changes nothing');
   assert.equal(baselineOf('skipsection.ts'), 'a\nb\n');
-  state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-  assert.equal(state.reviews[1].outcome, 'skipped');
+  assert.equal(reviews()[1].outcome, 'skipped');
 
-  // --- Skip whole file from the tree ----------------------------------------
-  const skipFile = path.join(ws, 'skipfile.ts');
-  await vscode.commands.executeCommand('copyworkcode.skipFile', {
-    resourceUri: vscode.Uri.file(skipFile),
+  // --- Skip a whole file from the tree --------------------------------------
+  await exec('copyworkcode.skipFile', {
+    resourceUri: vscode.Uri.file(file('skipfile.ts')),
   });
+  await settle();
   assert.equal(baselineOf('skipfile.ts'), 'x\ny\n');
-  state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-  assert.equal(state.reviews[2].outcome, 'skipped');
+  assert.equal(reviews()[2].outcome, 'skipped');
 
-  // --- Abort leaves the file untouched and the debt in place -----------------
-  const aborted = path.join(ws, 'aborted.ts');
-  await vscode.commands.executeCommand('copyworkcode.reviewFile', aborted);
-  const abortedDoc = vscode.workspace.textDocuments.find(
-    (d) => d.uri.fsPath === aborted
-  );
-  assert.ok(abortedDoc);
+  // --- Stopping records nothing and leaves the debt --------------------------
+  const aborted = await review('aborted.ts');
   await type('t');
   assert.equal(
-    abortedDoc.getText(),
+    aborted.getText(),
     'one\ntwo\n',
-    'accepted keystrokes change nothing in the buffer'
+    'matched keystrokes change nothing in the buffer'
   );
-  await vscode.commands.executeCommand('copyworkcode.abortReview');
-  assert.equal(abortedDoc.getText(), 'one\ntwo\n', 'abort has nothing to undo');
-  assert.equal(abortedDoc.isDirty, false, 'abort leaves the file clean');
-  assert.equal(baselineOf('aborted.ts'), 'one\n', 'abort leaves debt in place');
-  state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-  assert.equal(state.reviews.length, 3, 'abort records no review');
+  await exec('copyworkcode.abortReview');
+  await settle();
+  assert.equal(aborted.isDirty, false, 'stopping a matched review leaves it clean');
+  assert.equal(baselineOf('aborted.ts'), 'one\n', 'stopping leaves debt in place');
+  assert.equal(reviews().length, 3, 'stopping records no review');
 
-  // --- Doubled command invocation starts exactly one review ------------------
-  const race = path.join(ws, 'race.ts');
+  // --- A doubled gesture starts exactly one review --------------------------
   await Promise.all([
-    vscode.commands.executeCommand('copyworkcode.reviewFile', race),
-    vscode.commands.executeCommand('copyworkcode.reviewFile', race),
+    exec('copyworkcode.reviewFile', file('race.ts')),
+    exec('copyworkcode.reviewFile', file('race.ts')),
   ]);
-  const raceDoc = vscode.workspace.textDocuments.find(
-    (d) => d.uri.fsPath === race
-  );
-  assert.ok(raceDoc);
-  for (const key of ['r', '2']) {
-    await type(key);
-  }
+  await settle();
+  await typeAll('r2');
   assert.equal(baselineOf('race.ts'), 'r1\nr2\n');
-  state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-  assert.equal(
-    state.reviews.length,
-    4,
-    'double invocation records a single review'
-  );
+  assert.equal(reviews().length, 4, 'a double invocation records a single review');
 
-  // --- Tab routes through the engine as whitespace ---------------------------
-  const tabbed = path.join(ws, 'tabbed.ts');
-  await vscode.commands.executeCommand('copyworkcode.reviewFile', tabbed);
-  const tabbedDoc = vscode.workspace.textDocuments.find(
-    (d) => d.uri.fsPath === tabbed
-  );
-  assert.ok(tabbedDoc);
-  await vscode.commands.executeCommand('copyworkcode.typeTab');
-  await type('x');
-  assert.equal(
-    tabbedDoc.getText(),
-    'f\n\tx\n',
-    'tab snaps the indentation and the section completes'
-  );
-  assert.equal(baselineOf('tabbed.ts'), 'f\n\tx\n');
-  state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-  assert.equal(state.reviews.length, 5, 'tabbed review is recorded');
-
-  // --- Enter routes through the engine; raw edits bounce off read-only -------
-  const entered = path.join(ws, 'entered.ts');
-  await vscode.commands.executeCommand('copyworkcode.reviewFile', entered);
-  const enteredDoc = vscode.workspace.textDocuments.find(
-    (d) => d.uri.fsPath === entered
-  );
-  assert.ok(enteredDoc);
-  // Regression for the review-killing popup: an editing gesture that reaches
-  // the editor's default handler (as an unrebound Enter once did) must be
-  // blocked by the session read-only flag, not edit the buffer and abort.
-  await vscode.commands.executeCommand('default:type', { text: '!' });
-  assert.equal(
-    enteredDoc.getText(),
-    'start\na\nb\n',
-    'a default-path edit is inert during a review'
-  );
-  await type('a');
-  await vscode.commands.executeCommand('copyworkcode.typeEnter');
-  await type('b');
-  assert.equal(baselineOf('entered.ts'), 'start\na\nb\n');
-  state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-  assert.equal(state.reviews.length, 6, 'the review survived the blocked edit');
-
-  // --- A foreign change to the file aborts and keeps the new content ---------
-  const reload = path.join(ws, 'reload.ts');
-  await vscode.commands.executeCommand('copyworkcode.reviewFile', reload);
-  const reloadDoc = vscode.workspace.textDocuments.find(
-    (d) => d.uri.fsPath === reload
-  );
-  assert.ok(reloadDoc);
-  fs.writeFileSync(reload, 'external\n');
-  await vscode.commands.executeCommand('workbench.action.files.revert');
+  // --- Tab fills the next word, mixed with typing ---------------------------
+  const tabbed = await review('tabbed.ts');
+  await exec('copyworkcode.fillNextWord'); // the indent and "x"
+  await settle(150);
+  await typeAll(' =');
+  await exec('copyworkcode.fillNextWord'); // " y"
+  await settle(150);
+  await type(';');
   await settle();
   assert.equal(
-    reloadDoc.getText(),
-    'external\n',
-    'reloaded content is kept after the abort'
+    tabbed.getText(),
+    'f\n\tx = y;\n',
+    'a tab fill snaps the indentation and never edits the buffer'
   );
-  assert.equal(reloadDoc.isDirty, false, 'no stale content is resurrected');
-  state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-  assert.equal(state.reviews.length, 6, 'foreign-change abort records no review');
+  assert.equal(baselineOf('tabbed.ts'), 'f\n\tx = y;\n');
+  assert.equal(reviews()[4].outcome, 'typed', 'a part-typed section counts as typed');
 
-  // --- Closing the review editor tears the session down ----------------------
+  // --- A raw edit lands in the file and the review absorbs it ---------------
+  // The old read-only review made any such gesture inert. Now it is a real
+  // edit: the section grows around it and the walk carries on from there.
+  const entered = await review('entered.ts');
+  await exec('default:type', { text: '!' });
+  await settle();
+  assert.equal(
+    entered.getText(),
+    'start\n!a\nb\n',
+    'an edit off the matching path reaches the buffer'
+  );
+  await type('a');
+  await exec('copyworkcode.typeEnter');
+  await type('b');
+  await settle();
+  assert.equal(
+    baselineOf('entered.ts'),
+    'start\n!a\nb\n',
+    'the baseline records the reviewed content, including the edit'
+  );
+  assert.equal(reviews().length, 6, 'the review survived the raw edit');
+
+  // --- A reload from disk does not end the review ---------------------------
+  const reload = await review('reload.ts');
+  fs.writeFileSync(file('reload.ts'), 'external\n');
+  await exec('workbench.action.files.revert');
+  await settle(600);
+  assert.equal(reload.getText(), 'external\n', 'the reloaded content is kept');
+  assert.equal(reload.isDirty, false, 'no stale content is resurrected');
+  await exec('copyworkcode.jumpToReview');
+  await settle(150);
+  await claimRest();
+  assert.equal(
+    baselineOf('reload.ts'),
+    'external\n',
+    'the review outlived the reload and could still be completed'
+  );
+  assert.equal(reviews().length, 7, 'the reloaded review is recorded once');
+
+  // --- Replacing the whole buffer re-derives the sections -------------------
+  // A single change covering the document says nothing about where the old text
+  // went, so remapping it would collapse every section onto one range. The
+  // review restarts from the new content instead — and stays typeable.
+  const replaced = await review('replaced.ts');
+  const whole = new vscode.Range(
+    replaced.positionAt(0),
+    replaced.positionAt(replaced.getText().length)
+  );
+  await editorOf('replaced.ts').edit((edit) => edit.replace(whole, 'brand\nnew\n'));
+  await settle();
+  assert.equal(replaced.getText(), 'brand\nnew\n');
+  await exec('copyworkcode.jumpToReview');
+  await settle(150);
+  await typeAll('brandnew');
+  await settle();
+  assert.equal(
+    baselineOf('replaced.ts'),
+    'brand\nnew\n',
+    'the restarted review typed out the replacement content'
+  );
+  assert.equal(reviews()[7].hunksTyped, 1, 'the re-derived section counts as typed');
+
+  // --- Closing the review editor tears the session down --------------------
   // Regression for the wedge where an abandoned review blocked every future
   // one: close a review mid-flight, then run a full review of a *different*
   // file. If the first session leaked, the second never starts and these
   // assertions land on the wrong file.
-  const closed = path.join(ws, 'closed.ts');
-  await vscode.commands.executeCommand('copyworkcode.reviewFile', closed);
-  await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-  await settle();
+  await review('closed.ts');
+  await exec('workbench.action.closeActiveEditor');
+  await settle(600);
 
-  // --- A file created from scratch (empty baseline) reviews sanely -----------
-  const fresh = path.join(ws, 'fresh.ts');
-  const freshContent = 'created\nby agent\n';
-  await vscode.commands.executeCommand('copyworkcode.reviewFile', fresh);
-  const freshDoc = vscode.workspace.textDocuments.find(
-    (d) => d.uri.fsPath === fresh
-  );
-  assert.ok(freshDoc, 'review of the fresh file opened');
+  // --- A file created from scratch (empty baseline) reviews sanely ----------
+  const fresh = await review('fresh.ts');
   assert.equal(
-    freshDoc.getText(),
-    freshContent,
-    'whole-file section stays fully visible at review start'
+    fresh.getText(),
+    'created\nby agent\n',
+    'a whole-file section stays fully visible at review start'
   );
-  assert.equal(freshDoc.isDirty, false, 'whole-file review never dirties the file');
-  await vscode.commands.executeCommand('copyworkcode.skipSection');
-  assert.equal(baselineOf('fresh.ts'), freshContent);
-  assert.equal(
-    baselineOf('closed.ts'),
-    'c1\n',
-    'the abandoned review advanced nothing'
-  );
-  state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-  assert.equal(state.reviews.length, 7, 'closing the editor records no review');
+  await exec('copyworkcode.skipSection');
+  await settle();
+  assert.equal(baselineOf('fresh.ts'), 'created\nby agent\n');
+  assert.equal(baselineOf('closed.ts'), 'c1\n', 'the abandoned review advanced nothing');
+  assert.equal(reviews().length, 9, 'closing the editor records no review');
   assert.ok(
-    state.reviews[6].file.endsWith('fresh.ts'),
+    reviews()[8].file.endsWith('fresh.ts'),
     'the review after an abandoned one targets the right file'
   );
 
-  // --- A deletion-only change is confirmed, not typed -------------------------
-  const removed = path.join(ws, 'removed.ts');
-  await vscode.commands.executeCommand('copyworkcode.reviewFile', removed);
-  const removedDoc = vscode.workspace.textDocuments.find(
-    (d) => d.uri.fsPath === removed
-  );
-  assert.ok(removedDoc, 'review of the deletion-only file opened');
-  await type('x'); // typing has no target here and must not do anything
-  assert.equal(removedDoc.getText(), 'keep\n');
-  await vscode.commands.executeCommand('copyworkcode.confirmSection');
-  assert.equal(
-    baselineOf('removed.ts'),
-    'keep\n',
-    'confirming the deletion advanced the baseline'
-  );
-  state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-  assert.equal(state.reviews.length, 8, 'confirmed deletion is recorded');
-  assert.equal(state.reviews[7].outcome, 'typed');
-  assert.equal(state.reviews[7].hunksConfirmed, 1);
+  // --- A deletion-only change is confirmed, not typed ----------------------
+  const removed = await review('removed.ts');
+  await exec('copyworkcode.confirmSection');
+  await settle();
+  assert.equal(removed.getText(), 'keep\n', 'confirming a deletion edits nothing');
+  assert.equal(baselineOf('removed.ts'), 'keep\n');
+  assert.equal(reviews()[9].outcome, 'typed');
+  assert.equal(reviews()[9].hunksConfirmed, 1);
 
-  // --- The whole section filled word by word ---------------------------------
-  const word = path.join(ws, 'word.ts');
-  await vscode.commands.executeCommand('copyworkcode.reviewFile', word);
-  const wordDoc = vscode.workspace.textDocuments.find(
-    (d) => d.uri.fsPath === word
-  );
-  assert.ok(wordDoc);
+  // --- A whole section filled word by word ---------------------------------
+  const word = await review('word.ts');
   // 'const', ' sum', ' =', ' add', '(', 'a', ',', ' b', ');\n'
   for (let i = 0; i < 9; i++) {
-    await vscode.commands.executeCommand('copyworkcode.fillNextWord');
+    await exec('copyworkcode.fillNextWord');
+    await settle(120);
   }
   assert.equal(
-    wordDoc.getText(),
+    word.getText(),
     'w1\nconst sum = add(a, b);\n',
     'filling words leaves the content byte-identical'
   );
+  assert.equal(baselineOf('word.ts'), 'w1\nconst sum = add(a, b);\n');
+  assert.equal(reviews().length, 11, 'the word-filled review is recorded');
+
+  // --- Diverging: a wrong character is a real edit, and ten in a row hand
+  // --- the section over -----------------------------------------------------
+  const diverge = await review('diverge.ts');
+  assert.equal(diverge.getText(), 'd1\nORIGINAL\n');
+
+  await type('x');
+  await settle(150);
   assert.equal(
-    baselineOf('word.ts'),
-    'w1\nconst sum = add(a, b);\n',
-    'nine word fills completed the section'
+    diverge.getText(),
+    'd1\nxORIGINAL\n',
+    'a keystroke that does not match the target is still typed into the file'
   );
-  state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-  assert.equal(state.reviews.length, 9, 'the word-filled review is recorded');
 
-  // --- Starting another file parks the first, which resumes where it was -----
-  // Regression for the wedge that made every second file unreachable: moving
-  // to another file must not need the first review to be stopped, and coming
-  // back must not restart typing that was already done.
-  const parked = path.join(ws, 'parked.ts');
-  const other = path.join(ws, 'other.ts');
-  await vscode.commands.executeCommand('copyworkcode.reviewFile', parked);
-  for (const key of ['p', 'a', '2']) {
-    await type(key);
-  }
-  await vscode.commands.executeCommand('copyworkcode.reviewFile', other);
-  await settle();
-  const otherDoc = vscode.workspace.textDocuments.find(
-    (d) => d.uri.fsPath === other
-  );
-  assert.ok(otherDoc, 'the second file opened for review without a warning');
-  await vscode.commands.executeCommand('copyworkcode.abortReview');
-  assert.equal(baselineOf('other.ts'), 'ob1\n', 'the dropped review advanced nothing');
-
-  await vscode.commands.executeCommand('copyworkcode.reviewFile', parked);
-  await settle();
-  // Resumed, so the section stands at "pa2" and wants its line break next. On
-  // a restarted review these keystrokes would be rejected and the baseline
-  // would stay put.
-  await vscode.commands.executeCommand('copyworkcode.typeEnter');
-  for (const key of ['p', 'a', '3']) {
-    await type(key);
+  for (let i = 0; i < 4; i++) {
+    await type('x');
+    await settle(80);
   }
   assert.equal(
-    baselineOf('parked.ts'),
-    'pa1\npa2\npa3\n',
-    'the parked review resumed instead of starting over'
+    diverge.getText(),
+    'd1\nxxxxxORIGINAL\n',
+    'five of the reviewer’s own characters, all still matched against'
   );
-  state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-  assert.equal(state.reviews.length, 10, 'the resumed review is recorded once');
-  assert.equal(state.reviews[9].hunksTyped, 1);
-
-  // --- Comparing against git reaches files with no snapshot ------------------
-  const gitOnly = path.join(ws, 'gitonly.ts');
-  await vscode.commands.executeCommand('copyworkcode.reviewFile', gitOnly);
+  await exec('copyworkcode.finishReview');
   await settle();
   assert.equal(
-    vscode.workspace.textDocuments.some((d) => d.uri.fsPath === gitOnly),
+    reviews().length,
+    11,
+    'finishing is refused while a section is still owed'
+  );
+
+  for (let i = 0; i < 5; i++) {
+    await type('x');
+    await settle(80);
+  }
+  assert.equal(
+    diverge.getText(),
+    'd1\nxxxxxxxxxxORIGINAL\n',
+    'the tenth divergent character is typed like the rest'
+  );
+  assert.equal(
+    reviews().length,
+    11,
+    'a section handed over does not finish the review by itself'
+  );
+
+  // Guidance is off for this section now: nothing is being matched, so this
+  // keystroke is a plain insertion with no mismatch feedback behind it.
+  await type('y');
+  await settle(150);
+  const divergeText = diverge.getText();
+  assert.ok(
+    divergeText.includes('y'),
+    'typing in a handed-over section goes straight into the buffer'
+  );
+  assert.ok(divergeText.includes('xxxxxxxxxx'), 'the reviewer’s own run is intact');
+  assert.ok(divergeText.includes('ORIGINAL'), 'the target text is still there');
+
+  await exec('copyworkcode.finishReview');
+  await settle();
+  assert.equal(reviews().length, 12, 'the handed-over review finishes on request');
+  assert.equal(reviews()[11].hunksEdited, 1, 'recorded as a section written by hand');
+  assert.equal(
+    baselineOf('diverge.ts'),
+    onDisk('diverge.ts'),
+    'the baseline records the reviewer’s version of the file'
+  );
+
+  // --- Backspace works, and gives back exactly what it erased ---------------
+  const backspace = await review('backspace.ts');
+  await typeAll('be');
+  await exec('deleteLeft');
+  await settle();
+  assert.equal(
+    backspace.getText(),
+    'b1\nbta\n',
+    'backspace erases a real character — with no keybinding of ours involved'
+  );
+  await typeAll('ta');
+  await settle();
+  assert.equal(
+    baselineOf('backspace.ts'),
+    'b1\nbta\n',
+    'the section stayed coherent across the erase and completed'
+  );
+  assert.equal(reviews()[12].outcome, 'typed');
+
+  // --- Something else writing to the file mid-review -----------------------
+  // The old flow killed the review on any change it had not made itself. Now
+  // the sections are re-anchored and the walk carries on, however many changes
+  // arrive and wherever they land.
+  const foreign = await review('foreign.ts');
+  const foreignEdit = new vscode.WorkspaceEdit();
+  foreignEdit.insert(foreign.uri, new vscode.Position(0, 0), 'inserted\n');
+  foreignEdit.insert(
+    foreign.uri,
+    foreign.lineAt(foreign.lineCount - 1).range.end,
+    'tail\n'
+  );
+  assert.ok(await vscode.workspace.applyEdit(foreignEdit), 'the foreign edit applied');
+  await settle();
+  // A burst, to check that a file being written repeatedly does not tear the
+  // review down or turn every change into its own interruption.
+  for (let i = 0; i < 4; i++) {
+    const burst = new vscode.WorkspaceEdit();
+    burst.insert(foreign.uri, new vscode.Position(0, 0), `burst${i}\n`);
+    await vscode.workspace.applyEdit(burst);
+  }
+  await settle();
+  await exec('copyworkcode.jumpToReview');
+  await settle(150);
+  await typeAll('alpha');
+  await settle(150);
+  await typeAll('beta');
+  await settle();
+  assert.ok(
+    foreign.getText().includes('alpha\n') && foreign.getText().includes('beta\n'),
+    'the reviewed text came through the remapping unchanged'
+  );
+  assert.equal(
+    baselineOf('foreign.ts'),
+    foreign.getText(),
+    'both sections were typed after five foreign writes moved them'
+  );
+  assert.equal(reviews().length, 14, 'the review survived and was recorded once');
+  assert.equal(reviews()[13].hunksTyped, 2, 'both sections count as typed');
+
+  // --- Free roam: sections are a set, so the second one can go first -------
+  const roam = await review('roam.ts');
+  await clickAt('roam.ts', roam.getText().indexOf('two'));
+  await typeAll('two');
+  await settle(150);
+  // Claiming the last section walks the cursor back to the one still owed.
+  await typeAll('one');
+  await settle();
+  assert.equal(roam.getText(), 'r1\none\nr3\ntwo\nr5\n', 'roaming never edits the buffer');
+  assert.equal(baselineOf('roam.ts'), 'r1\none\nr3\ntwo\nr5\n');
+  assert.equal(reviews()[14].hunksTyped, 2, 'both sections claimed, in either order');
+
+  // --- The read-only lock option restores the strict behaviour -------------
+  const config = () => vscode.workspace.getConfiguration('copyworkcode');
+  await config().update('lockDuringReview', true, true);
+  await settle();
+  const locked = await review('locked.ts');
+  await type('x');
+  await settle(150);
+  assert.equal(
+    locked.getText(),
+    'l1\nlocked\n',
+    'with the lock on, a mismatched keystroke inserts nothing'
+  );
+  await exec('default:type', { text: '!' });
+  await settle(150);
+  assert.equal(
+    locked.getText(),
+    'l1\nlocked\n',
+    'with the lock on, an edit off the matching path is inert too'
+  );
+  await typeAll('locked');
+  await settle();
+  assert.equal(baselineOf('locked.ts'), 'l1\nlocked\n');
+  assert.equal(reviews()[15].outcome, 'typed');
+  await config().update('lockDuringReview', undefined, true);
+  await settle();
+  // The lock has to lift when the review ends, or the file stays unwritable for
+  // the rest of the session.
+  await vscode.window.showTextDocument(locked);
+  await settle();
+  await type('q');
+  assert.ok(locked.getText().includes('q'), 'the file is writable again afterwards');
+
+  // --- Comparing against git reaches files with no snapshot ----------------
+  await exec('copyworkcode.reviewFile', file('gitonly.ts'));
+  await settle();
+  assert.equal(
+    vscode.workspace.textDocuments.some((d) => d.uri.fsPath === file('gitonly.ts')),
     false,
     'with no snapshot behind it, the tracked queue has nothing to review'
   );
-
-  await vscode.commands.executeCommand('copyworkcode.useGitBaseline');
+  await exec('copyworkcode.useGitBaseline');
   await settle();
-  await vscode.commands.executeCommand('copyworkcode.reviewFile', gitOnly);
-  const gitDoc = vscode.workspace.textDocuments.find(
-    (d) => d.uri.fsPath === gitOnly
-  );
-  assert.ok(gitDoc, 'git mode reviews the change against the committed content');
-  for (const key of ['g', '2']) {
-    await type(key);
-  }
+  await review('gitonly.ts');
+  await typeAll('g2');
+  await settle();
   assert.equal(
     baselineOf('gitonly.ts'),
     'g1\ng2\n',
     'reviewing in git mode writes the snapshot, so the file leaves both queues'
   );
-  state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-  assert.equal(state.reviews.length, 11, 'the git-mode review is recorded');
-  await vscode.commands.executeCommand('copyworkcode.useTrackedBaseline');
+  assert.equal(reviews().length, 17, 'the git-mode review is recorded');
+  await exec('copyworkcode.useTrackedBaseline');
   await settle();
 
-  // --- Changing the animation level mid-review does not disturb it -----------
+  // --- Changing the animation level mid-review does not disturb it ---------
   // The animation owns decoration types that are disposed and rebuilt when the
-  // level changes; doing that under a live review must not touch the buffer,
-  // the engine position, or the outcome.
-  const animated = path.join(ws, 'animated.ts');
-  const animations = () => vscode.workspace.getConfiguration('copyworkcode');
-  await vscode.commands.executeCommand('copyworkcode.reviewFile', animated);
-  const animatedDoc = vscode.workspace.textDocuments.find(
-    (d) => d.uri.fsPath === animated
-  );
-  assert.ok(animatedDoc);
+  // level changes; doing that under a live review must not touch the buffer, a
+  // section's position, or the outcome. The mismatch on the way through also
+  // drives the reject animation across one of those rebuilds.
+  const animated = await review('animated.ts');
   await type('a');
-  await type('q'); // mismatch: drives the reject animation
-  await animations().update('animations', 'subtle', true);
+  await type('q'); // a real edit now, and the one that flashes
+  await settle(150);
+  assert.equal(animated.getText(), 'an1\naqn2\n');
+  await config().update('animations', 'subtle', true);
   await settle();
   await type('n');
-  await animations().update('animations', 'off', true);
+  await config().update('animations', 'off', true);
   await settle();
   await type('2');
+  await settle();
   assert.equal(
-    animatedDoc.getText(),
-    'an1\nan2\n',
+    animated.getText(),
+    'an1\naqn2\n',
     'animation frames never edit the buffer'
   );
   assert.equal(
     baselineOf('animated.ts'),
-    'an1\nan2\n',
+    'an1\naqn2\n',
     'the review completed across two animation level changes'
   );
-  state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-  assert.equal(state.reviews.length, 12, 'the review survived the level changes');
-  assert.equal(state.reviews[11].hunksTyped, 1);
-  await animations().update('animations', undefined, true);
+  assert.equal(reviews().length, 18, 'the review survived the level changes');
+  assert.equal(reviews()[17].hunksTyped, 1);
+  await config().update('animations', undefined, true);
   await settle();
 
   // Typing must be back to normal once no review is active. Typed into a file
   // that was never a review editor, so this cannot pass or fail on whatever
   // the last section happened to leave focused.
-  const plain = await vscode.workspace.openTextDocument(path.join(ws, 'skipfile.ts'));
+  const plain = await vscode.workspace.openTextDocument(file('skipfile.ts'));
   await vscode.window.showTextDocument(plain, { preview: false });
   await settle();
   await type('z');
-  assert.ok(
-    plain.getText().includes('z'),
-    'default typing works after review ends'
-  );
-
-  // A review abandoned by closing its tab had no editor left to lift the
-  // session read-only flag on; reopening the file must clear it on
-  // activation, or the file would look locked for the rest of the session.
-  const closedDoc = await vscode.workspace.openTextDocument(closed);
-  await vscode.window.showTextDocument(closedDoc);
-  await settle();
-  await type('q');
-  assert.ok(
-    closedDoc.getText().includes('q'),
-    'the file is writable again after an abandoned review'
-  );
+  assert.ok(plain.getText().includes('z'), 'default typing works after review ends');
 
   console.log('copyworkcode integration suite: all checks passed');
 }
