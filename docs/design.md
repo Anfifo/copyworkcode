@@ -8,8 +8,10 @@ AI-made code changes are captured as **change events**. Review debt, however, is
 event queue itself: debt is defined **per file, as the net diff between the last-reviewed
 baseline snapshot and the current content** (see "Unit of review" below). Changes apply to
 files immediately — nothing blocks the AI's own build/test iteration. The user clears debt
-by **retyping** the net change in a guided review flow, or by skipping it (manually, or
-automatically via configurable file-pattern rules — lockfiles, generated code, etc.).
+by **retyping** the net change in a guided review flow — in a normal editable editor, so
+rewriting the code instead of reproducing it is a first-class outcome — or by skipping it
+(manually, or automatically via configurable file-pattern rules — lockfiles, generated
+code, etc.).
 
 What this buys us, in order of priority:
 
@@ -171,146 +173,268 @@ makes the review metric "debt cleared" rather than "gate passed".
 
 ## Review UI: real editor, not a webview
 
-The review opens the actual file in a **normal editor** — not a diff view — and guides
-retyping in place, walking the changed sections top to bottom. An earlier version used
-the diff editor as the review surface and was rejected after real use: the global
-red/green diff painting drowned out every cue the review added, so reviewing felt
-indistinguishable from reading a diff. The review now owns its visuals, and the baseline
-diff is one action away (an editor-title button and a lens action open it side by side)
-instead of being the surface. Built on real text editors with decorations (not a
-webview) so IntelliSense, navigation, and every language feature keep working while
-reviewing. The user can freely look around the rest of the file mid-review.
+The review opens the actual file in a **normal, editable editor** — not a diff view, not a
+locked buffer — and guides retyping in place. An earlier version used the diff editor as the
+review surface and was rejected after real use: the global red/green diff painting drowned
+out every cue the review added, so reviewing felt indistinguishable from reading a diff. The
+review now owns its visuals, and the baseline diff is one action away (an editor-title button
+and a lens action open it side by side) instead of being the surface. Built on real text
+editors with decorations (not a webview) so IntelliSense, navigation, and every language
+feature keep working while reviewing.
 
-What the reviewer sees: text not yet typed is dimmed; the active section carries a
+What the reviewer sees: text still owed is dimmed; the section being worked on carries a
 whole-line highlight, a left border, and a scrollbar mark; and the exact run the next
-keystroke should produce is highlighted at the cursor. A lens strip floats above the
-active section with its position and progress ("Section 2/5 — typed 34/120") and
-clickable fill-word (Right), fill-line (Alt+F), skip (Alt+S), show-diff (Alt+D), and stop
-(Shift+Esc) actions. Every control's hover says what it does and ends with its key, so the
-strip stays narrow and nothing has to be memorized to be usable. A mismatched keystroke
-flares on the target it missed and fades out. The status bar mirrors position and
-keybindings; clicking it — or Alt+J — snaps the viewport back to the typing position after
-wandering off to read something else.
+keystroke should produce is highlighted at the cursor. A lens strip floats above that section
+with its progress ("Typed 34/120 · 6/9 claimed") and clickable fill-line (Alt+F), skip
+(Alt+S), show-diff (Alt+D) and stop (Shift+Esc) actions. Every *other* section still owed
+carries a one-click "start here" lens, because there is no order to fall back on any more —
+the sections a reviewer hasn't reached have to be reachable from wherever they are. Every
+control's hover says what it does and ends with its key, so the strip stays narrow and
+nothing has to be memorized to be usable. A section the reviewer took over gets a marker of
+its own, since guidance going quiet is otherwise indistinguishable from it being broken. The
+status bar mirrors coverage and keybindings; clicking it — or Alt+J — snaps the viewport back
+to the typing position after wandering off to read something else.
 
 Typing has motion, because a surface that only dims and undims text reads as nothing
 happening. An accepted keystroke flashes the run it produced and fades it in over about
 120ms, so the character lands rather than simply appears; typing faster than that leaves a
 short trail of settling characters behind the cursor. Text filled in rather than typed — a
 word, a line, a whole section — gets the same treatment swept left to right, so a fill is
-never mistakable for typing. A mismatch flares on the target it missed and decays over
-about 200ms, which reads as a rejection rather than the static red block it replaced.
+never mistakable for typing. A mismatch flares on the target it missed and decays over about
+200ms, which reads as a rejection rather than the static red block it replaced.
 
 Editor decorations compile to generated CSS rules: keyframes cannot be declared, and
-transforms are ignored on inline text spans, so a character cannot be scaled or slid.
-Every effect is therefore frame-stepped from the extension — a ladder of decoration types
-applied to a range in turn, one frame per clock tick — and animates only properties that
-leave layout alone: opacity, background, border, and weight (a monospace bold face carries
-the same advance width, so the impact frame cannot reflow the line). Motion that displaces
-text was
-considered and rejected: the one property that produces it, letter spacing, shifts the
-whole rest of the line with it, and a surface being typed into cannot afford text that
-jumps under the cursor. The clock runs only while something is in flight and the trail is
-bounded, so an idle review costs nothing and a burst of fast typing cannot grow the
-repaint. Animation is strictly decoration — it trails what the matching engine already
-decided and can never delay or change what a keystroke does. `copyworkcode.animations`
-sets the level: `full`, `subtle` (fades only, no flash), or `off`. Extensions get no
-reduced-motion signal from the editor, and a surface that flashes on every keystroke needs
-an off switch that is not a guess about the reader.
+transforms are ignored on inline text spans, so a character cannot be scaled or slid. Every
+effect is therefore frame-stepped from the extension — a ladder of decoration types applied
+to a range in turn, one frame per clock tick — and animates only properties that leave layout
+alone: opacity, background, border, and weight (a monospace bold face carries the same
+advance width, so the impact frame cannot reflow the line). Motion that displaces text was
+considered and rejected: the one property that produces it, letter spacing, shifts the whole
+rest of the line with it, and a surface being typed into cannot afford text that jumps under
+the cursor. The clock runs only while something is in flight and the trail is bounded, so an
+idle review costs nothing and a burst of fast typing cannot grow the repaint. Animation is
+strictly decoration — it trails what the matching engine already decided and can never delay
+or change what a keystroke does. `copyworkcode.animations` sets the level: `full`, `subtle`
+(fades only, no flash), or `off`. Extensions get no reduced-motion signal from the editor, and
+a surface that flashes on every keystroke needs an off switch that is not a guess about the
+reader.
 
-The right arrow is a control rather than navigation: inside a review there is nowhere
-useful to move right, since everything to the right is text still owed, so the key fills
-the next word instead — pending whitespace plus a run of identifier characters, or a run
-of adjacent symbols so `=>` and `);` go in one press. It fills only when the cursor is at
-the typing position; with a selection open, or after clicking away to read something else,
-it moves as it always did, so a fill never happens where the reviewer isn't looking. Like
-fill-line, filling is not typing: a section cleared entirely by fills is recorded as
-skipped.
+### Edit mode: the review guides, it does not lock
 
-How the in-place retype works, given that changes are already applied to the file
-(apply-now model): the buffer keeps its final content for the whole review and is never
-edited by the flow. Each accepted keystroke advances a matching engine, restoring normal
-rendering as the cursor moves. The user reads and reproduces real text in place — the
-typing is the review — but since the buffer never changes, a review cannot dirty,
-truncate, or lose the file, and stopping at any point just drops the overlay. This
-matters most for a file the agent created from scratch (its baseline is empty, so the
-entire file is one section): it reviews the same way, fully visible and dimmed until
-typed, rather than presenting as an alarming empty buffer. Sections that only *removed*
-lines are explicit stops in the walk: nothing to retype, so the lens strip reports how
-many lines were deleted there and offers a one-click confirm, recorded separately from
-typed and skipped counts.
+**The review happens in an editable buffer.** That is the shape of the whole feature: a
+surface that refuses your keystrokes is a quiz, and the point was never a quiz. The buffer
+already holds the final content (apply-now model), so:
 
-Keystrokes are intercepted with a `type` command override while a review is active. That
-is what guarantees completions, snippets, and auto-closing pairs can never insert text on
-the user's behalf inside the review region — rather than trying to disable each editor
-convenience individually. The reviewed editor is also marked read-only for the session:
-printable input still reaches the override (the editor dispatches the `type` command
-before its read-only check), while every editing gesture that bypasses it — backspace,
-paste, drag-and-drop, line moves, undo, anything unforeseen — is inert instead of
-editing the buffer behind the engine's back and killing the review. Blocking by
-enumerating keybindings was tried first and rejected: the list can never be complete,
-and every miss aborts someone's review. Enter and Tab are dispatched as editor commands
-rather than `type` input, so both are rebound — scoped to the reviewed editor only — to
-route through the matching engine and snap whitespace like any other formatting
-keystroke. The read-only flag lifts when the review ends; if the review's editor is
-already gone (its tab was closed), the reset runs when the file next becomes active.
+- A keystroke that **matches** the target inserts nothing. It advances that section's
+  position, and the dimming recedes behind it. Typing a change out is therefore
+  non-destructive: a file reproduced exactly is left byte-identical, and a review cannot
+  dirty, truncate, or lose it. This matters most for a file the agent created from scratch
+  (empty baseline, so the whole file is one section): it reviews the same way, fully visible
+  and dimmed until typed, rather than presenting as an alarming empty buffer.
+- A keystroke that **doesn't match** is a real edit. It goes into the file, immediately,
+  where the cursor is. Backspace, delete, paste, undo, multi-cursor, line moves — all of
+  them are the editor simply doing its job. Backspace in particular needed no work at all:
+  it was inert only because the buffer was locked.
+- After `copyworkcode.freeEditAfter` **consecutive** unmatched characters (10 by default),
+  the flow concludes the reviewer meant to write their own code here. It stops matching that
+  section, stops the mismatch feedback, and records it as **edited** — a fourth outcome
+  alongside typed, skipped and confirmed. Any matched keystroke resets the count to zero, and
+  erasing never counts toward it: backspace is correcting, not diverging. The handover is
+  scoped to that one section; guidance re-arms on the next.
 
-Because the flow makes no edits of its own, any change to the document during a review
-is by definition foreign — a formatter, an agent editing the file mid-review, a reload
-from disk. Foreign changes invalidate the section offsets, so the review stops; the new
-content is kept untouched and the debt stays in place.
+Divergence being implicit was chosen over an explicit two-mode toggle. A toggle is honest but
+demands a decision before you know whether you disagree with the code — and by the time you
+do know, you are already typing. (The toggle stays the fallback if the implicit version proves
+confusing in real use; see brainstorm.md.)
 
-One review is live at a time, but a review is not a commitment. Starting another file
-**parks** the current one — its section, its position inside that section, and its
-counters — and coming back resumes exactly there. Parking is not an outcome: nothing is
-written, nothing is logged, and the file keeps its place in the queue with its position on
-its row. An earlier version refused the second file outright ("a review is already in
-progress"), which made every other file unreachable until the first was stopped and lost;
-freedom to move matters more than a tidy single-session model. A parked position describes
-offsets in the content it was parked on, so a file that changed in the meantime starts its
-walk over rather than typing into stale offsets.
+While a section is still being matched, a divergent character is written with an explicit
+buffer edit rather than handed to the editor's own type handler. Two reasons. The edit
+resolves only once the change has reached the extension, so the section has already been
+re-anchored around the new character and no part of the flow has to race the change event.
+And it inserts exactly the character typed, so an auto-closing pair cannot add a bracket the
+target already has and leave the reviewer two characters from a target they were one character
+from. Once a section is handed over, input takes the editor's normal path and every
+convenience comes back with it — completions, auto-close, auto-indent, format-on-type.
 
-Closing the review tab parks as well — an accidental tab close is not a decision to throw
-away typing — while stopping deliberately discards the position, so the next review of that
-file starts clean. There are three visible ways to stop: Shift+Esc, a stop button in the
-editor title bar, and the lens strip's Stop action. Marking a file reviewed from the queue
-also drops whatever review state it had, live or parked, since its debt is being cleared
-anyway. The start gate covers the whole async setup, so a doubled gesture (double-click on
-a row, an impatient re-click) still collapses into one review, and asking to review the
-file already under review just jumps back to its typing position.
+Keystrokes are still intercepted with a `type` command override. That is what guarantees
+completions and snippets cannot type code on the reviewer's behalf *while a character is being
+matched* — the one place where they would defeat the entire point. Enter and Tab are
+dispatched as editor commands rather than `type` input, so both are rebound, scoped to the
+moment a character is actually being matched: Enter routes through the engine so whitespace
+snaps, and Tab fills the next word. Everywhere else, including inside a section that was
+handed over, they are Enter and Tab.
+
+`copyworkcode.lockDuringReview` (default off) brings the old behaviour back for anyone who
+wants a review to reproduce a change strictly: the review editor is marked read-only for the
+session, printable input still reaches the override (the editor dispatches `type` before its
+read-only check), and every other gesture is inert. Mismatches insert nothing and no section
+is ever handed over. It is an option, not the mechanism. Blocking by enumerating keybindings
+was tried before it and rejected: that list can never be complete, and every miss aborted
+somebody's review.
+
+What edit mode gives up, deliberately: **stopping a review no longer leaves the file
+untouched.** Whatever was typed or rewritten is already in it — that is what "lands in real
+time" means. And completing a review advances the baseline to *the buffer's content*, which
+is the reviewer's version rather than the agent's, so a section they rewrote is recorded as
+reviewed and accepted instead of being handed straight back as debt.
+
+### Offsets that survive the buffer changing
+
+A section is a range of document offsets, and in an editable buffer those offsets move.
+Earlier versions ended the review on any content change the flow had not made itself — a
+formatter, an agent editing the file mid-review, a reload from disk — because the offsets were
+invalid from that point on. That guard is precisely what forced read-only to exist.
+
+It is replaced by remapping (`src/core/sections.ts`, pure and unit-tested, including a fuzz
+pass over a few hundred arbitrary edits). Every change is reconciled against the section set:
+
+- a change **before** a section shifts it;
+- a change reaching into text **already typed** rewinds that section's claim to where the edit
+  began — the characters after it are no longer the ones that were read and reproduced;
+- a change in the **untyped remainder** re-slices the target, so a section's target always
+  equals the document text it points at;
+- a section **rewritten wholesale** keeps covering the replacement with nothing claimed: new
+  text is unreviewed text;
+- a section **edited away entirely** is closed out as edited;
+- text inserted exactly **at** the typing position counts as covered, which is what makes a
+  reviewer's own divergent character behave without a second pass to get wrong. The cost is
+  that a formatter inserting at exactly the cursor is taken as covered too — the one offset
+  where that is a fair guess, since it is where the reviewer is typing;
+- overlaps left by a change straddling two sections are normalised away, so every character
+  has exactly one owner.
+
+None of this is announced. A file being written to repeatedly underneath a review would turn
+any per-change notice into a stream of them, and the remapping is meant to be invisible. The
+one exception is a change replacing the **whole document** — a revert or a reload from disk,
+which says nothing about where the old text went and would otherwise collapse every section
+onto one range. Those re-derive the sections from a fresh diff, and say so once, in the status
+bar rather than in a dialog.
+
+Changes landing outside every section are not turned into new sections. New debt shows up in
+the queue the next time the file is read, which is the answer the debt model gives everywhere
+else; growing the set live would mean treating the reviewer's own free editing as fresh debt
+in the middle of their review.
+
+### Sections are a set, not a sequence
+
+Sections stopped being a walk. Each one carries its own typing position and its own outcome,
+and the active one is whichever contains the cursor. Guidance is on only when the cursor sits
+exactly where that section owes its next character, with no selection open; anywhere else the
+reviewer is using the editor as an editor and their keystrokes are not second-guessed.
+
+Ordered walking survives as the default *motion*, not as a rule: claiming a section walks the
+cursor to the next one still owed, wrapping at the end, so someone who just keeps typing is
+led straight through the file and never has to ask for the next section. Clicking anywhere
+else hands the editor back on the spot. Progress reads as coverage — "6 of 9 claimed" — with
+no notion of position in a queue.
+
+A pure ordered walk was rejected once the lock was gone: with the cursor free, a flow that
+insists on the next section spends its time fighting the user for it. What that gives up,
+knowingly, is the sequence guarantee — coverage is measured, order is not.
+
+Reaching full coverage *by typing* finishes the review on the spot. Reaching it because the
+last section was handed over does not: the reviewer is mid-edit there, and saving the file and
+clearing its debt out from under them would be the wrong moment. The finish is offered
+instead — the status bar becomes the button, alongside a lens action, an editor-title button
+and Alt+Enter.
+
+**Parking went with the sequence.** One review is live at a time, and starting another file
+ends the current one; per-section progress *is* the state, so there is no separate position
+left to preserve. The read-only era parked a review and resumed it if the file was still
+byte-identical, a check that under edit mode would almost never pass — the file changes
+*because* it is being reviewed. A review does outlive its tab being closed (the document
+usually does too, and an accidental close is not a decision to abandon a file) and ends when
+the document itself closes, since its offsets describe a buffer that no longer exists.
+Marking a file reviewed from the queue also ends its review, since the debt is being cleared
+anyway. The start gate covers the whole async setup, so a doubled gesture — a double-click on
+a row, an impatient re-click — still collapses into one review, and asking to review the file
+already under review just jumps back to its typing position.
+
+### Ambient change highlight
+
+Independently of any review: the changed regions of **any** open file are marked against that
+file's baseline — a light dim, a gutter icon and a scrollbar mark, with no session, no engine
+and no lock (`copyworkcode.ambientHighlight`, on by default). This is the tool at rest, and it
+serves a second use for it: an easier way to look at what changed recently, with no commitment
+to review anything. On by default, because a feature that has to be switched on to be noticed
+is not the tool at rest.
+
+It keeps the review's polarity — changed code is the dimmed side, because that is what typing
+over it undims — at a lighter dim than a review uses, so the two never read as the same state.
+Full dim keeps its one meaning: under review, still owed. Inverting the ambient layer (dimming
+the *unchanged* context so changes pop) reads better as a pure review surface and was rejected
+for exactly that reason: it makes changed code the bright side, and the metaphor the product
+runs on is that unreviewed code is dim until you give it life by typing it. The file under
+review is excluded — its own overlay says more, and two dimming layers over one buffer
+compound into a third shade that means nothing. Diffs are cached per document version and
+coalesced to a pause in typing, and a file past a size cap is skipped.
+
+### Fills: what the flow hands you, and what it advertises
+
+Filling is not typing: a section cleared entirely by fills is recorded as skipped.
+
+The right arrow is a control rather than navigation while a character is being matched:
+there is nowhere useful to move right, since everything to the right is text still owed, so
+the key spends itself on the word ahead — pending whitespace plus a run of identifier
+characters, or a run of adjacent symbols so `=>` and `);` go in one press. Tab does the same
+thing, which loses no indentation case: the word fill already consumes the whitespace before
+the word, and indentation never has to be typed anyway (see the matching rules). Away from
+the matching position both keys are an arrow key and a tab again, so a fill can never happen
+where the reviewer isn't looking.
+
+Neither the lens strip nor the status bar advertises the word fill any more. The controls a
+review shows should be the ones worth teaching, and a gesture whose whole function is to hand
+you a word you were supposed to type is not one to put in front of someone on every section.
+It stays a keybinding and a palette command, so anyone who wants it — or wants it on a
+different key — has it.
 
 ### The review queue view
 
-One row per file waiting for review, in the extension's own activity-bar panel, biggest
-change first — change size is what a reviewer picks by, so it leads the row: `+12 −3`, then
-the review's position if one is parked there, then how many agent edits are behind it, then
-the directory. A tree row cannot colour its own text, so the colour lives on the icon,
-which doubles as the shape of the change: additions only, deletions only, or both. The
-hover carries the long form — path, counts against whatever the current baseline is, parked
-position, agent edits, when it was last reviewed and how — the container badge carries the
-pending count, and one inline button marks a file reviewed without typing it.
+One row per file waiting for review, in the extension's own activity-bar panel, biggest change
+first — change size is what a reviewer picks by, so it leads the row: `+12 −3`, then the
+review's coverage if one is live there, then how many agent edits are behind it, then the
+directory. The file-icon theme keeps the icon, so a row still reads as the kind of file it is;
+the colour of the change goes on the **filename** instead, through a file-decoration provider
+using the standard git decoration colours by change shape (added, deleted, both). Inline
+colour on the `+N −M` counts is not possible in a native tree view — a row's description is a
+single uncoloured string — and rewriting the queue as a webview to get it was rejected, since
+that costs the file-icon theme, the container badge and the welcome content. Decorations are
+per-URI rather than per-view, so the same tint appears in the Explorer and on editor tabs: a
+side effect rather than the goal, but a welcome one, since a file with unreviewed changes then
+reads as one everywhere. The hover carries the long form — path, counts against whatever the
+current baseline is, live coverage, agent edits, when it was last reviewed and how — the
+container badge carries the pending count, and one inline button marks a file reviewed without
+typing it. Alt+N moves to the next file in the queue, and finishing a review offers the same
+move.
 
 ### Retype matching rules
 
 Typing in a real buffer means the editor itself modifies text the user didn't type
 (auto-indent, auto-closing brackets, format-on-type). The matching policy:
 
-- **Code is typed character-for-character.** Editor completions and snippets are
-  suppressed inside the review region — tab-completing whole lines would defeat the
-  entire point.
+- **Code is typed character-for-character.** Editor completions and snippets are suppressed
+  while a character is being matched — tab-completing whole lines would defeat the entire
+  point.
 - **Whitespace snaps to the target.** Any whitespace keystroke (space, enter, tab) at a
-  formatting boundary auto-applies whatever whitespace the target text actually has —
-  press space where the target has a newline and the newline is inserted for you, and
-  vice versa. Typing the next visible character while whitespace is pending applies the
-  run too, so indentation never has to be typed. Line endings and auto-indent artifacts
-  can never cause a mismatch.
-- **Trailing whitespace is absorbed.** When only whitespace remains in a section, the
-  last accepted keystroke completes it — otherwise every section would end on an
-  invisible pending newline the user has to guess at.
-- **Strictness is a setting** (not yet implemented; see todo). A permissive mode lets the
-  user deliberately deviate — reformat or improve as they type — which feeds the
-  deviation flow below (stale-context notification + re-sync prompt) instead of counting
-  as a mismatch. The current behavior is the strict mode: mismatched keystrokes insert
-  nothing.
+  formatting boundary auto-applies whatever whitespace the target text actually has — press
+  space where the target has a newline and the newline is inserted for you, and vice versa.
+  Typing the next visible character while whitespace is pending applies the run too, so
+  indentation never has to be typed. Line endings and auto-indent artifacts can never cause a
+  mismatch.
+- **Trailing whitespace is absorbed.** When only whitespace remains in a section, the last
+  accepted keystroke completes it — otherwise every section would end on an invisible pending
+  newline the user has to guess at.
+- **Multi-character input is not a match.** A paste, an IME commit, or a completion arriving
+  as one `type` call cannot stand in for typing; it takes the divergence path like any other
+  non-match, which in edit mode means it lands in the file as the edit it is.
+- **Mismatches are edits, and enough of them end the matching.** This is what used to be
+  tracked as a "strictness setting": the permissive mode is no longer a mode. Deliberate
+  deviation is the default behaviour of a normal editor, and the divergence budget is the
+  dial (`copyworkcode.freeEditAfter`). The strict end of it kept its own switch —
+  `copyworkcode.lockDuringReview`, where a mismatch inserts nothing at all.
+- Sections that only *removed* lines are explicit stops: nothing to retype, so the lens strip
+  reports how many lines were deleted there and offers a one-click confirm, recorded
+  separately from typed, skipped and edited counts.
 
 ## Review stats: personal only
 
@@ -337,9 +461,13 @@ tamper-evidence machinery, and keeps the extension out of surveillance territory
 ## Repo layout
 
 - `src/` — extension source (TypeScript). `src/core/` holds editor-independent logic
-  (diff, retype matching, baseline store, event-log parsing, git baseline reads, agent
-  settings transforms) so it can be unit-tested with plain Node. `src/typingFx.ts` owns the retype overlay's animation, kept out of the
-  controller so the review flow never interleaves timing concerns with matching.
+  (diff, retype matching, the section model and its offset remapper, baseline store,
+  event-log parsing, git baseline reads, agent settings transforms) so it can be
+  unit-tested with plain Node. `src/core/sections.ts` is the one that has to be right for
+  the review to survive an editable buffer, which is why it is pure. `src/typingFx.ts`
+  owns the retype overlay's animation and `src/ambient.ts` the no-session change
+  highlight, both kept out of the controller so the review flow never interleaves timing
+  or whole-workspace concerns with matching.
 - `hook/` — standalone hook script installed into agent tooling (plain Node, no deps).
 - `test/` — unit tests (`npm test`, Node's built-in runner). The hook script is tested
   end-to-end by spawning it as a subprocess with realistic payloads; installing and
@@ -347,9 +475,13 @@ tamper-evidence machinery, and keeps the extension out of surveillance territory
   that must survive untouched — somebody else's hooks on the same event, or in the same
   entry.
 - `test-integration/` — extension-host tests (`npm run test:integration`): boots a real
-  editor against a fixture workspace and drives a full retype review, section skip,
-  file skip, word fills, parking and resuming a review, a review that runs across two
-  animation-level changes, and abort through the command layer.
+  editor against a fixture workspace, one file per review case, and drives them through
+  the command layer. Alongside the plain flow (typing, fills, skips, deletion confirm,
+  abort, git mode, animation levels changing mid-review) it covers the cases that only
+  exist because the buffer is editable: a mismatched keystroke landing in the file, ten in
+  a row handing the section over, backspace, five foreign writes moving the sections
+  underneath a live review, the buffer being replaced wholesale, claiming two sections out
+  of order, and the read-only lock option.
 - `scripts/seed-demo.js` — rebuilds `demo-workspace/` (gitignored, `npm run demo:seed`):
   a small workspace with pre-made baselines and pending debt, one file per interesting
   review case, so the review flow can be tried by hand without an agent session. The

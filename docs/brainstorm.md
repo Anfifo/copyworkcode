@@ -67,16 +67,33 @@ status ("filled") distinct from typed and skipped.
   typed); the region-sized fill and a distinct "filled" status stay parked until real use
   shows where the line between fair and too-easy sits.
 
-### Resuming a parked review by focusing its editor
+### Explicit review/edit mode toggle
 
-Parked reviews resume when the file is opened from the queue. They could instead resume the
-moment their editor becomes the active one, making the switch gestureless.
+The fallback if the implicit divergence budget reads badly in real use: a key (Alt+E, say)
+that switches a section between "guide me" and "let me write", instead of inferring it from
+a run of unmatched characters.
 
-- **Upside:** moving between two half-reviewed files costs nothing at all.
-- **Downside:** tabbing to a file would silently make it read-only and repaint it with the
-  review overlay, which is a lot of behavior to attach to a click on a tab.
-- **Status:** parked. The explicit gesture is one click and says what it does; revisit if
-  switching between files in one sitting turns out to be common.
+- **Upside:** nothing is ever inferred, so the flow can never guess wrong about intent.
+- **Downside:** demands a decision before you know whether you disagree with the code —
+  and by the time you do know, you are already typing, which is exactly the moment the
+  implicit version handles for free. Also one more mode to explain.
+- **Status:** parked as the named fallback (2026-08-19). Implicit divergence shipped
+  first; if dogfooding shows the hand-over is confusing or fires when unwanted, this is
+  the replacement, not a patch to the budget.
+
+### Aggregate review worksheet
+
+One synthetic buffer holding every changed region across every file in the queue, reviewed
+top to bottom in a single sitting.
+
+- **Upside:** one surface, no file-switching, and a natural reading order for a large
+  change set.
+- **Downside:** edit mode is the review surface now, and edits have to land in the real
+  file — a freely editable aggregate buffer would have to map every edit back across files,
+  which is the hard part of a multi-file editor. Edit mode argues for a continuous queue
+  walk across real files instead (Alt+N is the beginning of that).
+- **Status:** parked (2026-08-19). Revisit only if a read-only aggregate *preview* turns
+  out to be wanted on its own, separate from reviewing.
 
 ## Rejected (kept for the record)
 
@@ -87,6 +104,35 @@ Attaching "reviewed by typing" evidence to PRs for reviewers or employers.
 - **Why rejected:** turns a personal learning mirror into surveillance; demands
   tamper-evidence machinery and privacy answers the product doesn't otherwise need. Stats
   are personal-only by design (2026-08-16).
+
+### Ordered walk as the review's structure
+
+Sections as a strict sequence, with the flow always pointing at "the next one".
+
+- **Why rejected:** it only worked because the editor was locked. With the cursor free, a
+  flow that insists on the next section spends its time fighting the user for it. Sections
+  became a set with per-section progress, keeping the ordered walk as the default motion
+  and dropping it as a rule (2026-08-19, see design.md). Parking went with it: per-section
+  progress *is* the state, and the byte-identical resume check it depended on would almost
+  never pass once reviewing a file changes it.
+
+### Inverting the ambient highlight
+
+Dimming the *unchanged* context in an open file so the changed code pops, rather than
+dimming the changed code.
+
+- **Why rejected:** it reads better as a pure review surface, but it makes changed code the
+  bright side — and the metaphor the product runs on is that unreviewed code is dim until
+  you give it life by typing it. Same polarity as review mode, lighter dim (2026-08-19).
+
+### Rebuilding the review queue as a webview
+
+A webview queue could colour the `+N −M` counts inline, which a native tree view cannot.
+
+- **Why rejected:** it costs the file-icon theme (the exact thing being restored when the
+  custom row icons were dropped), the container badge, and the native welcome content, all
+  for inline colour on two numbers. A file-decoration provider tints the filename instead
+  and the counts stay grey (2026-08-19).
 
 ### Per-event replay as the unit of review
 

@@ -6,9 +6,11 @@ A VSCode extension that turns AI-generated code changes into something you activ
 review — by typing them yourself.
 
 When an AI assistant edits your code, the change doesn't just land silently. Instead,
-copyworkcode presents it and asks you to write it out, change by change. You can skip any
-change with a click, and configure rules to auto-skip files you don't care to review
-(lockfiles, generated code, formatting-only edits).
+copyworkcode presents it and asks you to write it out, change by change. It happens in a
+normal editor, not a locked one: if you disagree with what the AI wrote, type what you
+wanted instead and it lands in the file. You can skip any change with a click, and
+configure rules to auto-skip files you don't care to review (lockfiles, generated code,
+formatting-only edits).
 
 ## Why
 
@@ -32,12 +34,23 @@ Early development, but the core loop works end to end:
   `~/.claude/settings.json`. Switching it off removes that entry again.
 - **Queue.** Files with unreviewed changes are listed in the extension's own activity-bar
   panel, biggest change first.
-- **Review.** Opening one guides the retype in place, in a normal editor: text you haven't
-  typed yet is dimmed, the current section is highlighted, and the diff against the
-  baseline stays one keystroke away. The file's content is never modified by the review, so
-  a session can't dirty, truncate, or lose your work — stopping just drops the overlay.
-- **Interruptible.** Starting another file parks the current review with its position and
-  progress; coming back resumes exactly there.
+- **Review.** Opening one guides the retype in place: text you haven't typed yet is
+  dimmed, the section you're on is highlighted, and the diff against the baseline stays one
+  keystroke away. Keystrokes that match the code insert nothing — they just undim it — so
+  typing a change out exactly leaves the file byte-identical.
+- **Disagree by typing.** The editor stays a real editor. Anything that doesn't match the
+  code is an ordinary edit and lands in the file as you type it; backspace, paste and undo
+  all work. Ten characters of your own in a row and the tool concludes you meant to rewrite
+  this bit: it stops matching that section, records it as yours rather than the AI's, and
+  picks guidance back up on the next one. There's no mode to switch, and erasing never
+  counts against you. If you'd rather it be strict, one setting makes the file read-only
+  for the review instead.
+- **Walk it in any order.** Sections aren't a queue — click into any of them and start
+  typing. Finishing one still moves you to the next, so you can also just keep typing and
+  be led through the file.
+- **See what changed without reviewing anything.** Changed regions of any open file are
+  marked against the baseline — a light dim, a gutter icon, a scrollbar mark — with no
+  review started. It doubles as a quieter way to look at what an agent just did.
 - **Skippable at every scale.** Fill the next word or the rest of a line, skip a section or
   a whole file, or set globs for files you never want to review. Filled text is never
   counted as typed.
