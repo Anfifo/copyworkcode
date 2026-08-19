@@ -211,7 +211,9 @@ export class RetypeController implements vscode.Disposable {
     });
     // Which section is active follows the cursor, so moving it is a UI event.
     this.selectionGuard = vscode.window.onDidChangeTextEditorSelection((e) => {
-      if (this.session?.document === e.textEditor.document) this.updateUi();
+      if (this.session?.document !== e.textEditor.document) return;
+      this.snapToTypingPosition();
+      this.updateUi();
     });
     this.visibilityGuard = vscode.window.onDidChangeVisibleTextEditors(() =>
       this.updateUi()
@@ -897,10 +899,23 @@ export class RetypeController implements vscode.Disposable {
   // --- cursor and focus -------------------------------------------------------
 
   /**
-   * Where the cursor is in relation to the review. Guidance is on only when the
-   * cursor sits exactly where the active section owes its next character, with
-   * no selection open: anywhere else the reviewer is using the editor as an
-   * editor, and keystrokes must not be second-guessed.
+   * Where the cursor is in relation to the review.
+   *
+   * Guidance covers the whole of what a section still owes — the dimmed run —
+   * rather than the single offset its next character sits at. Requiring the
+   * caret to be exactly there made the most ordinary gesture there is (click
+   * into the changed code, start typing) fall through to the plain editor, so
+   * the keystrokes went in *beside* the text they were meant to reproduce
+   * instead of consuming it. Inside the dimmed run, typing is matched; the
+   * keystroke applies at the typing position wherever in that run the caret
+   * happens to be, and `snapToTypingPosition` keeps the caret there so the
+   * character always appears where it is being typed.
+   *
+   * The line that divides guided from ordinary editing is therefore the one
+   * already on screen: dimmed text belongs to the review and typing consumes
+   * it, text already covered is the reviewer's and typing inserts into it. A
+   * selection or a second cursor is a gesture about the file, not about the one
+   * character a section is waiting for, and is left alone either way.
    */
   private focus(): Focus | undefined {
     const s = this.session;
@@ -913,10 +928,9 @@ export class RetypeController implements vscode.Disposable {
       section.kind === 'type' &&
       !section.free &&
       editor.selection.isEmpty &&
-      // More than one cursor is a gesture about the whole file, not about the
-      // one character this section is waiting for.
       editor.selections.length === 1 &&
-      cursor === typedBoundary(section);
+      cursor >= typedBoundary(section) &&
+      cursor <= section.end;
     return { editor, cursor, section, guided };
   }
 
@@ -933,6 +947,24 @@ export class RetypeController implements vscode.Disposable {
     if (s.active && !isClaimed(s.active)) return s.active;
     s.active = undefined;
     return undefined;
+  }
+
+  /**
+   * A click landing in text a section still owes puts the caret on that
+   * section's typing position instead of where the click landed. Typing is
+   * matched across the whole dimmed run, so without this the character would
+   * appear somewhere other than the caret that asked for it — and the caret is
+   * the one thing a reader trusts about where their typing goes.
+   *
+   * Only inside the dimmed run: text already covered is the reviewer's, and a
+   * caret they put there to fix something stays where they put it.
+   */
+  private snapToTypingPosition(): void {
+    const focus = this.focus();
+    if (!focus?.guided) return;
+    const boundary = typedBoundary(focus.section);
+    if (focus.cursor === boundary) return;
+    this.moveCursorTo(boundary);
   }
 
   private editorsFor(document: vscode.TextDocument): vscode.TextEditor[] {

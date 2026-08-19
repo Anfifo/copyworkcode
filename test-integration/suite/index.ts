@@ -397,6 +397,32 @@ export async function run(): Promise<void> {
   assert.equal(reviews().length, 14, 'the review survived and was recorded once');
   assert.equal(reviews()[13].hunksTyped, 2, 'both sections count as typed');
 
+  // --- Clicking into the middle of a section and typing ---------------------
+  // The gesture every reviewer makes first. Guidance used to need the caret on
+  // the exact next character, so a click anywhere else in the changed code sent
+  // the keystrokes to the plain editor and they went in *beside* the text they
+  // were meant to reproduce. Typing anywhere in what a section still owes has
+  // to be matched, and the caret has to end up where the typing is going.
+  const inbox = await review('inbox.ts');
+  await clickAt('inbox.ts', inbox.getText().indexOf('de the'));
+  const caret = editorOf('inbox.ts').selection.active;
+  assert.equal(
+    inbox.offsetAt(caret),
+    inbox.getText().indexOf('inside'),
+    'the caret moved to the typing position the click landed past'
+  );
+  await typeAll('ins');
+  await settle();
+  assert.equal(
+    inbox.getText(),
+    'i1\ninside the box\n',
+    'typing after the click was matched, not inserted beside the target'
+  );
+  await exec('copyworkcode.skipSection');
+  await settle();
+  assert.equal(baselineOf('inbox.ts'), 'i1\ninside the box\n');
+  assert.equal(reviews().length, 15, 'the clicked-into review is recorded');
+
   // --- Free roam: sections are a set, so the second one can go first -------
   const roam = await review('roam.ts');
   await clickAt('roam.ts', roam.getText().indexOf('two'));
@@ -407,7 +433,7 @@ export async function run(): Promise<void> {
   await settle();
   assert.equal(roam.getText(), 'r1\none\nr3\ntwo\nr5\n', 'roaming never edits the buffer');
   assert.equal(baselineOf('roam.ts'), 'r1\none\nr3\ntwo\nr5\n');
-  assert.equal(reviews()[14].hunksTyped, 2, 'both sections claimed, in either order');
+  assert.equal(reviews()[15].hunksTyped, 2, 'both sections claimed, in either order');
 
   // --- The read-only lock option restores the strict behaviour -------------
   const config = () => vscode.workspace.getConfiguration('copyworkcode');
@@ -431,7 +457,7 @@ export async function run(): Promise<void> {
   await typeAll('locked');
   await settle();
   assert.equal(baselineOf('locked.ts'), 'l1\nlocked\n');
-  assert.equal(reviews()[15].outcome, 'typed');
+  assert.equal(reviews()[16].outcome, 'typed');
   await config().update('lockDuringReview', undefined, true);
   await settle();
   // The lock has to lift when the review ends, or the file stays unwritable for
@@ -459,7 +485,7 @@ export async function run(): Promise<void> {
     'g1\ng2\n',
     'reviewing in git mode writes the snapshot, so the file leaves both queues'
   );
-  assert.equal(reviews().length, 17, 'the git-mode review is recorded');
+  assert.equal(reviews().length, 18, 'the git-mode review is recorded');
   await exec('copyworkcode.useTrackedBaseline');
   await settle();
 
@@ -490,8 +516,8 @@ export async function run(): Promise<void> {
     'an1\naqn2\n',
     'the review completed across two animation level changes'
   );
-  assert.equal(reviews().length, 18, 'the review survived the level changes');
-  assert.equal(reviews()[17].hunksTyped, 1);
+  assert.equal(reviews().length, 19, 'the review survived the level changes');
+  assert.equal(reviews()[18].hunksTyped, 1);
   await config().update('animations', undefined, true);
   await settle();
 
@@ -519,7 +545,7 @@ export async function run(): Promise<void> {
   );
   await exec('copyworkcode.skipSection');
   await settle();
-  assert.equal(reviews().length, 19, 'the fast-typed review is recorded');
+  assert.equal(reviews().length, 20, 'the fast-typed review is recorded');
 
   // Typing must be back to normal once no review is active. Typed into a file
   // that was never a review editor, so this cannot pass or fail on whatever

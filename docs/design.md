@@ -330,9 +330,23 @@ in the middle of their review.
 ### Sections are a set, not a sequence
 
 Sections stopped being a walk. Each one carries its own typing position and its own outcome,
-and the active one is whichever contains the cursor. Guidance is on only when the cursor sits
-exactly where that section owes its next character, with no selection open; anywhere else the
-reviewer is using the editor as an editor and their keystrokes are not second-guessed.
+and the active one is whichever contains the cursor.
+
+**Guidance covers everything a section still owes — the dimmed run — not the single offset its
+next character sits at.** The first version required the caret to be exactly there, which broke
+on the most ordinary gesture there is: clicking into the changed code and typing. The caret goes
+where the click landed, guidance was therefore off, and the keystrokes went in *beside* the text
+they were meant to reproduce instead of consuming it — the tool reading as though it refused to
+let you write over the change. Inside the dimmed run, typing is matched wherever the caret is,
+the keystroke applies at the typing position, and a click into that run puts the caret there so
+a character never appears somewhere other than the caret that asked for it.
+
+That makes the line dividing guided typing from ordinary editing the one already on screen:
+**dimmed text belongs to the review and typing consumes it; text already covered is the
+reviewer's, and typing there inserts like anywhere else.** A caret they deliberately put back
+into text they had covered stays where they put it. A selection or a second cursor is a gesture
+about the file rather than about the one character a section is waiting for, and is left alone
+either way.
 
 Ordered walking survives as the default *motion*, not as a rule: claiming a section walks the
 cursor to the next one still owed, wrapping at the end, so someone who just keeps typing is

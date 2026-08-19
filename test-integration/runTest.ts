@@ -62,6 +62,9 @@ async function main(): Promise<void> {
     'f1\nalpha\nf3\nbeta\nf5\n'
   );
   fs.writeFileSync(path.join(baselines, 'foreign.ts'), 'f1\nf3\nf5\n');
+  // Clicked into the middle of what the section owes, then typed.
+  fs.writeFileSync(path.join(fixture, 'inbox.ts'), 'i1\ninside the box\n');
+  fs.writeFileSync(path.join(baselines, 'inbox.ts'), 'i1\n');
   // Two sections claimed out of order, starting with the second.
   fs.writeFileSync(path.join(fixture, 'roam.ts'), 'r1\none\nr3\ntwo\nr5\n');
   fs.writeFileSync(path.join(baselines, 'roam.ts'), 'r1\nr3\nr5\n');
@@ -111,9 +114,9 @@ async function main(): Promise<void> {
   const state = JSON.parse(
     fs.readFileSync(path.join(fixture, '.copyworkcode', 'state.json'), 'utf8')
   );
-  if (state.reviews.length !== 19) {
+  if (state.reviews.length !== 20) {
     throw new Error(
-      `expected 19 review records in the fixture, found ${state.reviews.length}`
+      `expected 20 review records in the fixture, found ${state.reviews.length}`
     );
   }
   const advanced = fs.readFileSync(path.join(baselines, 'sample.ts'), 'utf8');
