@@ -4,7 +4,7 @@ import { ChangeEvent } from './types';
 import { EventQueue } from './eventQueue';
 import { ReviewLog } from './reviewState';
 import { DebtMode, DebtSource } from './debtSource';
-import { DebtTreeProvider } from './debtView';
+import { DebtDecorations, DebtTreeProvider } from './debtView';
 import { RetypeController, BASELINE_SCHEME } from './retypeController';
 import { AmbientDebt } from './ambient';
 import { syncCaptureHook } from './hookInstaller';
@@ -185,8 +185,14 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
     () => retype?.reviewedDocument,
     context.extensionUri
   );
-  tree = new DebtTreeProvider(root, source, queue, log, (file) =>
-    retype?.progressFor(file)
+  const decorations = new DebtDecorations();
+  tree = new DebtTreeProvider(
+    root,
+    source,
+    queue,
+    log,
+    (file) => retype?.progressFor(file),
+    decorations
   );
   const view = vscode.window.createTreeView('copyworkcode.debt', {
     treeDataProvider: tree,
@@ -206,7 +212,9 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
     source,
     retype,
     ambient,
+    decorations,
     view,
+    vscode.window.registerFileDecorationProvider(decorations),
     queue.onDidAddEvents((events) => {
       autoSkip(root, events);
       refresh();
