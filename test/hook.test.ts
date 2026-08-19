@@ -190,3 +190,50 @@ test('oversized content is dropped from the event but the event is kept', () => 
   assert.equal(events.length, 1);
   assert.deepEqual(events[0].change, { kind: 'write', content: '' });
 });
+
+test('a credentials file gets no baseline snapshot', () => {
+  const root = enabledWorkspace();
+  const file = path.join(root, '.env');
+  fs.writeFileSync(file, 'API_TOKEN=super-secret\n');
+  runHook(
+    payload(root, 'PreToolUse', 'Edit', {
+      file_path: file,
+      old_string: 'super-secret',
+      new_string: 'rotated',
+    })
+  );
+  assert.equal(fs.existsSync(path.join(root, '.copyworkcode', 'baselines')), false);
+});
+
+test('a credentials file is recorded as an occurrence without its content', () => {
+  const root = enabledWorkspace();
+  const file = path.join(root, 'config', 'secrets.json');
+  runHook(
+    payload(root, 'PostToolUse', 'Write', {
+      file_path: file,
+      content: '{ "token": "super-secret" }',
+    })
+  );
+  const events = readEvents(root);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].file, file);
+  assert.equal(events[0].change, undefined);
+  // The point of the exclusion: the secret is nowhere in the log, in any form.
+  const raw = fs.readFileSync(path.join(root, '.copyworkcode', 'events.jsonl'), 'utf8');
+  assert.equal(raw.includes('super-secret'), false);
+});
+
+test('code that handles secrets is captured in full', () => {
+  const root = enabledWorkspace();
+  const file = path.join(root, 'src', 'secrets.ts');
+  runHook(
+    payload(root, 'PostToolUse', 'Write', {
+      file_path: file,
+      content: 'export const key = read();\n',
+    })
+  );
+  assert.deepEqual(readEvents(root)[0].change, {
+    kind: 'write',
+    content: 'export const key = read();\n',
+  });
+});

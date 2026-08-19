@@ -18,36 +18,90 @@
     "commands": [
       {
         "command": "copyworkcode.enableWorkspace",
-        "title": "CopyWorkCode: Enable in this Workspace"
+        "title": "Enable in this Workspace",
+        "category": "CopyWorkCode"
       },
       {
         "command": "copyworkcode.installAgentHook",
-        "title": "CopyWorkCode: Install Agent Integration"
+        "title": "Turn On Agent Capture",
+        "category": "CopyWorkCode"
+      },
+      {
+        "command": "copyworkcode.uninstallAgentHook",
+        "title": "Turn Off Agent Capture",
+        "category": "CopyWorkCode"
       },
       {
         "command": "copyworkcode.reviewFile",
-        "title": "CopyWorkCode: Review File by Retyping"
+        "title": "Review File by Retyping",
+        "category": "CopyWorkCode"
       },
       {
         "command": "copyworkcode.skipFile",
-        "title": "Skip (Mark Reviewed Without Typing)"
+        "title": "Mark Reviewed Without Typing",
+        "category": "CopyWorkCode",
+        "icon": "$(check)"
       },
       {
         "command": "copyworkcode.refresh",
         "title": "Refresh",
+        "category": "CopyWorkCode",
         "icon": "$(refresh)"
       },
       {
+        "command": "copyworkcode.useGitBaseline",
+        "title": "Compare Against Git",
+        "category": "CopyWorkCode",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "copyworkcode.useTrackedBaseline",
+        "title": "Compare Against Last Reviewed",
+        "category": "CopyWorkCode",
+        "icon": "$(bookmark)"
+      },
+      {
+        "command": "copyworkcode.openSettings",
+        "title": "Settings",
+        "category": "CopyWorkCode",
+        "icon": "$(gear)"
+      },
+      {
         "command": "copyworkcode.skipSection",
-        "title": "CopyWorkCode: Skip Current Section"
+        "title": "Skip Current Section",
+        "category": "CopyWorkCode"
       },
       {
         "command": "copyworkcode.fillNextLine",
-        "title": "CopyWorkCode: Fill Next Line"
+        "title": "Fill Next Line",
+        "category": "CopyWorkCode"
+      },
+      {
+        "command": "copyworkcode.fillNextWord",
+        "title": "Fill Next Word",
+        "category": "CopyWorkCode"
       },
       {
         "command": "copyworkcode.abortReview",
-        "title": "CopyWorkCode: Stop Review"
+        "title": "Stop Review",
+        "category": "CopyWorkCode",
+        "icon": "$(stop-circle)"
+      },
+      {
+        "command": "copyworkcode.confirmSection",
+        "title": "Confirm Deleted Section",
+        "category": "CopyWorkCode"
+      },
+      {
+        "command": "copyworkcode.jumpToReview",
+        "title": "Jump to Review Position",
+        "category": "CopyWorkCode"
+      },
+      {
+        "command": "copyworkcode.showReviewDiff",
+        "title": "Show Review Diff",
+        "category": "CopyWorkCode",
+        "icon": "$(diff)"
       }
     ],
     "viewsContainers": {
@@ -75,25 +129,76 @@
       },
       {
         "view": "copyworkcode.debt",
+        "contents": "Nothing captured yet — no changes have been recorded for this workspace.\nCompare against git to review changes made before capture was on, or turn on capture to collect them from now on.\n[Compare Against Git](command:copyworkcode.useGitBaseline)\n[Turn On Agent Capture](command:copyworkcode.installAgentHook)",
+        "when": "copyworkcode.enabled && copyworkcode.debtMode != git && !config.copyworkcode.agentCapture"
+      },
+      {
+        "view": "copyworkcode.debt",
         "contents": "All clear — no changes waiting for review.",
-        "when": "copyworkcode.enabled"
+        "when": "copyworkcode.enabled && copyworkcode.debtMode != git && config.copyworkcode.agentCapture"
+      },
+      {
+        "view": "copyworkcode.debt",
+        "contents": "Nothing differs from the git revision being compared against.\n[Compare Against Last Reviewed](command:copyworkcode.useTrackedBaseline)",
+        "when": "copyworkcode.enabled && copyworkcode.debtMode == git"
       }
     ],
     "menus": {
+      "editor/title": [
+        {
+          "command": "copyworkcode.showReviewDiff",
+          "when": "copyworkcode.reviewing",
+          "group": "navigation@1"
+        },
+        {
+          "command": "copyworkcode.abortReview",
+          "when": "copyworkcode.reviewing",
+          "group": "navigation@2"
+        }
+      ],
       "view/title": [
+        {
+          "command": "copyworkcode.useGitBaseline",
+          "when": "view == copyworkcode.debt && copyworkcode.enabled && copyworkcode.debtMode != git",
+          "group": "navigation@1"
+        },
+        {
+          "command": "copyworkcode.useTrackedBaseline",
+          "when": "view == copyworkcode.debt && copyworkcode.enabled && copyworkcode.debtMode == git",
+          "group": "navigation@1"
+        },
         {
           "command": "copyworkcode.refresh",
           "when": "view == copyworkcode.debt",
-          "group": "navigation"
+          "group": "navigation@2"
+        },
+        {
+          "command": "copyworkcode.openSettings",
+          "when": "view == copyworkcode.debt",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
         {
           "command": "copyworkcode.skipFile",
-          "when": "view == copyworkcode.debt && viewItem == copyworkcode.file"
+          "when": "view == copyworkcode.debt && viewItem == copyworkcode.file",
+          "group": "inline"
+        },
+        {
+          "command": "copyworkcode.skipFile",
+          "when": "view == copyworkcode.debt && viewItem == copyworkcode.file",
+          "group": "1_review"
         }
       ],
       "commandPalette": [
+        {
+          "command": "copyworkcode.installAgentHook",
+          "when": "!config.copyworkcode.agentCapture"
+        },
+        {
+          "command": "copyworkcode.uninstallAgentHook",
+          "when": "config.copyworkcode.agentCapture"
+        },
         {
           "command": "copyworkcode.skipFile",
           "when": "false"
@@ -101,6 +206,14 @@
         {
           "command": "copyworkcode.reviewFile",
           "when": "false"
+        },
+        {
+          "command": "copyworkcode.useGitBaseline",
+          "when": "copyworkcode.enabled && copyworkcode.debtMode != git"
+        },
+        {
+          "command": "copyworkcode.useTrackedBaseline",
+          "when": "copyworkcode.enabled && copyworkcode.debtMode == git"
         },
         {
           "command": "copyworkcode.skipSection",
@@ -111,7 +224,23 @@
           "when": "copyworkcode.reviewing"
         },
         {
+          "command": "copyworkcode.fillNextWord",
+          "when": "copyworkcode.reviewing"
+        },
+        {
           "command": "copyworkcode.abortReview",
+          "when": "copyworkcode.reviewing"
+        },
+        {
+          "command": "copyworkcode.confirmSection",
+          "when": "copyworkcode.reviewing"
+        },
+        {
+          "command": "copyworkcode.jumpToReview",
+          "when": "copyworkcode.reviewing"
+        },
+        {
+          "command": "copyworkcode.showReviewDiff",
           "when": "copyworkcode.reviewing"
         }
       ]
@@ -120,16 +249,41 @@
       {
         "command": "copyworkcode.skipSection",
         "key": "alt+s",
-        "when": "copyworkcode.reviewing && editorTextFocus"
+        "when": "copyworkcode.reviewing && copyworkcode.reviewEditorFocused && editorTextFocus"
       },
       {
         "command": "copyworkcode.fillNextLine",
         "key": "alt+f",
-        "when": "copyworkcode.reviewing && editorTextFocus"
+        "when": "copyworkcode.reviewing && copyworkcode.reviewEditorFocused && editorTextFocus"
+      },
+      {
+        "command": "copyworkcode.fillNextWord",
+        "key": "right",
+        "when": "copyworkcode.reviewing && copyworkcode.reviewEditorFocused && editorTextFocus && !suggestWidgetVisible"
       },
       {
         "command": "copyworkcode.abortReview",
         "key": "shift+escape",
+        "when": "copyworkcode.reviewing && editorTextFocus"
+      },
+      {
+        "command": "copyworkcode.typeTab",
+        "key": "tab",
+        "when": "copyworkcode.reviewing && copyworkcode.reviewEditorFocused && editorTextFocus"
+      },
+      {
+        "command": "copyworkcode.typeEnter",
+        "key": "enter",
+        "when": "copyworkcode.reviewing && copyworkcode.reviewEditorFocused && editorTextFocus"
+      },
+      {
+        "command": "copyworkcode.jumpToReview",
+        "key": "alt+j",
+        "when": "copyworkcode.reviewing && editorTextFocus"
+      },
+      {
+        "command": "copyworkcode.showReviewDiff",
+        "key": "alt+d",
         "when": "copyworkcode.reviewing && editorTextFocus"
       }
     ],
@@ -147,6 +301,32 @@
             "**/node_modules/**"
           ],
           "description": "Changes to files matching these globs are skipped automatically."
+        },
+        "copyworkcode.animations": {
+          "type": "string",
+          "enum": [
+            "full",
+            "subtle",
+            "off"
+          ],
+          "enumDescriptions": [
+            "Typed characters flash and fade into place, filled runs sweep in, and a mismatched keystroke flares and fades.",
+            "Typed and filled text fades in, and a mismatch fades out. No flash.",
+            "No motion: text appears as soon as it is typed and a mismatch shows a plain flash."
+          ],
+          "default": "full",
+          "description": "How much motion the retype overlay adds while typing."
+        },
+        "copyworkcode.gitRef": {
+          "type": "string",
+          "default": "HEAD",
+          "description": "Revision the git comparison mode compares the working tree against. Used only while the review queue is set to compare against git."
+        },
+        "copyworkcode.agentCapture": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "description": "Record edits made by Claude Code, so changed files appear in the review queue automatically. Turning this on adds one hook entry to ~/.claude/settings.json; turning it off removes that entry again. The hook only records in workspaces where CopyWorkCode is enabled, and nothing is sent anywhere. Applies to every workspace, because the file it edits is shared by all of them."
         }
       }
     }
@@ -154,6 +334,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
+    "demo:seed": "node scripts/seed-demo.js",
     "pretest": "tsc -p tsconfig.test.json",
     "test": "node --test \"out-test/test/*.test.js\"",
     "test:integration": "tsc -p tsconfig.test.json && node out-test/test-integration/runTest.js"

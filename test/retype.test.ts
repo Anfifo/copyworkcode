@@ -115,3 +115,39 @@ test('CRLF targets reproduce CRLF exactly via snapping', () => {
   assert.equal(produced, target);
   assert.equal(engine.done, true);
 });
+
+test('fillWord takes the pending whitespace and the next word', () => {
+  const engine = new RetypeEngine('const total = sum(a, b);\n');
+  assert.equal(engine.fillWord(), 'const');
+  assert.equal(engine.fillWord(), ' total');
+  assert.equal(engine.fillWord(), ' =');
+  assert.equal(engine.fillWord(), ' sum');
+  assert.equal(engine.fillWord(), '(');
+  assert.equal(engine.fillWord(), 'a');
+  assert.equal(engine.fillWord(), ',');
+  assert.equal(engine.fillWord(), ' b');
+  // Adjacent symbols go together, and the trailing newline is absorbed.
+  assert.equal(engine.fillWord(), ');\n');
+  assert.equal(engine.done, true);
+  assert.equal(engine.fillWord(), '');
+});
+
+test('fillWord snaps indentation like a whitespace keystroke does', () => {
+  const engine = new RetypeEngine('a\n  bc d');
+  engine.handleInput('a');
+  assert.equal(engine.fillWord(), '\n  bc');
+  assert.equal(engine.fillWord(), ' d');
+  assert.equal(engine.done, true);
+});
+
+test('an engine resumes partway through its target', () => {
+  const engine = new RetypeEngine('abcd', 2);
+  assert.equal(engine.position, 2);
+  assert.equal(engine.remaining, 'cd');
+  assert.deepEqual(engine.handleInput('c'), { kind: 'insert', text: 'c' });
+});
+
+test('a resume position outside the target is clamped', () => {
+  assert.equal(new RetypeEngine('ab', 99).done, true);
+  assert.equal(new RetypeEngine('ab', -5).position, 0);
+});

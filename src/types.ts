@@ -44,4 +44,6 @@ export interface ReviewRecord {
   /** Section counts for typed reviews (a review can mix typing and skips). */
   hunksTyped?: number;
   hunksSkipped?: number;
+  /** Deletion-only sections acknowledged with one action. */
+  hunksConfirmed?: number;
 }

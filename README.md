@@ -24,8 +24,30 @@ change with a click, and configure rules to auto-skip files you don't care to re
 
 ## Status
 
-Early development. The core loop works end to end: changes made by Claude Code are
-captured via hooks, files with unreviewed changes show up in an explorer view, and each
-one can be reviewed by retyping it in a guided diff view (or skipped — per section, per
-file, or automatically by glob). Intent capture, heuristic detection for other tools, and
-the polish list are still ahead.
+Early development, but the core loop works end to end:
+
+- **Capture, if you want it.** Agent capture is off until you turn it on. Switched on, it
+  records edits made by Claude Code through its hooks — a snapshot of each file taken
+  before the edit, plus a log of what changed — by adding one entry to
+  `~/.claude/settings.json`. Switching it off removes that entry again.
+- **Queue.** Files with unreviewed changes are listed in the extension's own activity-bar
+  panel, biggest change first.
+- **Review.** Opening one guides the retype in place, in a normal editor: text you haven't
+  typed yet is dimmed, the current section is highlighted, and the diff against the
+  baseline stays one keystroke away. The file's content is never modified by the review, so
+  a session can't dirty, truncate, or lose your work — stopping just drops the overlay.
+- **Interruptible.** Starting another file parks the current review with its position and
+  progress; coming back resumes exactly there.
+- **Skippable at every scale.** Fill the next word or the rest of a line, skip a section or
+  a whole file, or set globs for files you never want to review. Filled text is never
+  counted as typed.
+- **Git as a baseline.** With nothing to set up, the queue can compare the working tree
+  against a git revision instead of the last-reviewed snapshot — which is also how you
+  review changes that landed before capture was on.
+
+Everything runs locally: no account, no network calls, no data leaving the machine. The
+one file outside the workspace it will ever touch is the agent's own settings, only if you
+turn capture on, and turning capture off puts it back.
+
+Intent capture, detection for agents other than Claude Code, and the polish list are still
+ahead.

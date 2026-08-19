@@ -9,6 +9,18 @@
         "kind": "build",
         "isDefault": true
       }
+    },
+    {
+      "type": "npm",
+      "script": "demo:seed",
+      "label": "seed demo workspace",
+      "problemMatcher": []
+    },
+    {
+      "label": "prepare demo",
+      "dependsOn": ["npm: compile", "seed demo workspace"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
     }
   ]
 }

@@ -18,9 +18,15 @@ export type InputResult =
 
 export class RetypeEngine {
   /** Characters of the target already produced (typed or snapped). */
-  private pos = 0;
+  private pos: number;
 
-  constructor(readonly target: string) {}
+  /** `start` resumes a section that was paused partway through. */
+  constructor(
+    readonly target: string,
+    start = 0
+  ) {
+    this.pos = Math.min(Math.max(start, 0), target.length);
+  }
 
   get position(): number {
     return this.pos;
@@ -94,6 +100,28 @@ export class RetypeEngine {
     return text;
   }
 
+  /**
+   * The pending whitespace plus the next word — the fill-next-word control.
+   * A "word" is a run of identifier characters, or a run of adjacent symbols
+   * when the next character isn't one (`=>` and `);` fill in one go), so the
+   * gesture always lands on a boundary the reader recognizes.
+   */
+  fillWord(): string {
+    if (this.done) {
+      return '';
+    }
+    const rest = this.remaining;
+    const leading = /^\s*/.exec(rest)![0].length;
+    let end = leading;
+    if (isWordChar(rest[end])) {
+      while (end < rest.length && isWordChar(rest[end])) end++;
+    } else {
+      while (end < rest.length && isSymbol(rest[end])) end++;
+    }
+    this.pos += end;
+    return this.absorbTrailingWhitespace(rest.slice(0, end));
+  }
+
   /** Everything still untyped — used when a section is skipped. */
   fillRest(): string {
     const text = this.remaining;
@@ -108,4 +136,12 @@ export class RetypeEngine {
     }
     return this.target.slice(this.pos, end);
   }
+}
+
+function isWordChar(char: string | undefined): boolean {
+  return char !== undefined && /[\p{L}\p{N}_$]/u.test(char);
+}
+
+function isSymbol(char: string | undefined): boolean {
+  return char !== undefined && !/\s/.test(char) && !isWordChar(char);
 }

@@ -1,0 +1,7 @@
+# One line-ending convention everywhere: LF in the repository and in working
+# copies, whatever platform a contributor is on.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.vsix binary

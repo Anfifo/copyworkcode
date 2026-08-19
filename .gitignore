@@ -1,4 +1,4 @@
-# Local assistant instructions — never commit
+# Local, machine-specific notes and tool state — never committed
 CLAUDE.md
 CLAUDE.local.md
 .claude/
@@ -10,6 +10,9 @@ out-test/
 dist/
 *.vsix
 *.tsbuildinfo
+
+# Generated playground for manual testing (npm run demo:seed)
+demo-workspace/
 
 # Editor / OS noise
 .vscode-test/

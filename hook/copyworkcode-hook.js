@@ -9,9 +9,13 @@
 //   pre-change state the review diff needs (the file is about to change).
 // - PostToolUse: append a change event to <cwd>/.copyworkcode/events.jsonl.
 //
-// Two hard requirements shape this file:
+// Three hard requirements shape this file:
 // - It only records in workspaces that opted in (the data directory exists),
 //   so it is safe to install at user scope for all projects.
+// - It never copies the content of a credentials file, in either direction:
+//   no baseline snapshot and no text in the event. The occurrence is still
+//   recorded, so an agent touching one is visible, but the secret is not
+//   duplicated into the workspace data directory.
 // - It must never disturb the agent session: any failure exits 0 silently.
 //   Plain Node, no dependencies, so it runs wherever the agent runs.
 
@@ -19,6 +23,48 @@ const fs = require('fs');
 const path = require('path');
 
 const FILE_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit']);
+
+// Files whose content is never copied anywhere. This mirrors the pattern list
+// in src/core/sensitive.ts, which carries the reasoning and the tests; the two
+// must stay in sync. Reimplemented here rather than imported because this
+// script runs standalone, with no build step and no dependencies.
+const SENSITIVE_NAMES = [
+  /^\.env(\.|$)/,
+  /\.env$/,
+  /^id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$/,
+  /^\.(npmrc|netrc|pgpass|htpasswd)$/,
+  /\.(pem|key|p12|pfx|jks|keystore|asc|gpg|kdbx)$/,
+];
+const SENSITIVE_DATA_NAMES = [
+  /(^|[._-])secrets?([._-]|$)/,
+  /(^|[._-])credentials?([._-]|$)/,
+];
+const DATA_EXTENSIONS = new Set([
+  '', 'json', 'jsonc', 'yaml', 'yml', 'ini', 'toml', 'cfg', 'conf', 'config',
+  'properties', 'txt', 'xml', 'csv', 'tfvars', 'plist', 'enc',
+]);
+const SENSITIVE_DIRS = new Set(['.ssh', '.gnupg', '.aws', '.gcloud', '.azure']);
+
+function isSensitive(cwd, file) {
+  const rel = path.relative(cwd, file).toLowerCase();
+  const name = path.basename(rel);
+  if (SENSITIVE_NAMES.some((pattern) => pattern.test(name))) return true;
+
+  const dot = name.lastIndexOf('.');
+  const extension = dot <= 0 ? '' : name.slice(dot + 1);
+  if (
+    DATA_EXTENSIONS.has(extension) &&
+    SENSITIVE_DATA_NAMES.some((pattern) => pattern.test(name))
+  ) {
+    return true;
+  }
+
+  return path
+    .dirname(rel)
+    .split(path.sep)
+    .flatMap((segment) => segment.split('/'))
+    .some((segment) => SENSITIVE_DIRS.has(segment));
+}
 // Content larger than this is dropped from events; occurrence is still kept.
 const MAX_CONTENT_BYTES = 512 * 1024;
 
@@ -91,7 +137,12 @@ function appendEvent(cwd, dataDir, payload, input, file) {
     agent: 'claude-code',
     file: path.resolve(cwd, file),
     toolName: payload.tool_name,
-    change: buildChange(payload.tool_name, input),
+    change: isSensitive(cwd, file)
+      ? undefined
+      : buildChange(payload.tool_name, input),
+    // Pointers, not contents: enough to find the message behind this change if
+    // the review later asks what it was for. The transcript stays the agent's
+    // own file, read on demand and never copied in here.
     intentRef: {
       transcriptPath: payload.transcript_path,
       sessionId: payload.session_id,
@@ -118,6 +169,9 @@ function main(raw) {
   const absolute = path.resolve(payload.cwd, file);
 
   if (payload.hook_event_name === 'PreToolUse') {
+    // No baseline for a credentials file: the snapshot would be a verbatim copy
+    // of it, and without a baseline the file has no review debt either.
+    if (isSensitive(payload.cwd, absolute)) return;
     snapshotBaseline(payload.cwd, absolute);
   } else if (payload.hook_event_name === 'PostToolUse') {
     appendEvent(payload.cwd, dataDir, payload, input, absolute);

@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { spawnSync } from 'child_process';
 import { runTests } from '@vscode/test-electron';
 
 /**
@@ -8,6 +9,10 @@ import { runTests } from '@vscode/test-electron';
  * baselines and pending debt, then runs the suite in the extension host.
  */
 async function main(): Promise<void> {
+  // Inherited from editor-integrated terminals; it makes the spawned test
+  // editor start as a plain Node process instead of booting the workbench.
+  delete process.env.ELECTRON_RUN_AS_NODE;
+
   const extensionDevelopmentPath = path.resolve(__dirname, '..', '..');
   const extensionTestsPath = path.resolve(__dirname, 'suite');
 
@@ -27,6 +32,45 @@ async function main(): Promise<void> {
   // Review started and aborted.
   fs.writeFileSync(path.join(fixture, 'aborted.ts'), 'one\ntwo\n');
   fs.writeFileSync(path.join(baselines, 'aborted.ts'), 'one\n');
+  // Review command fired twice for one gesture (double-click).
+  fs.writeFileSync(path.join(fixture, 'race.ts'), 'r1\nr2\n');
+  fs.writeFileSync(path.join(baselines, 'race.ts'), 'r1\n');
+  // Indented section typed with the tab key.
+  fs.writeFileSync(path.join(fixture, 'tabbed.ts'), 'f\n\tx\n');
+  fs.writeFileSync(path.join(baselines, 'tabbed.ts'), 'f\n');
+  // Multi-line section typed with the enter key between lines.
+  fs.writeFileSync(path.join(fixture, 'entered.ts'), 'start\na\nb\n');
+  fs.writeFileSync(path.join(baselines, 'entered.ts'), 'start\n');
+  // File reloaded from disk mid-review.
+  fs.writeFileSync(path.join(fixture, 'reload.ts'), 'a\nb\n');
+  fs.writeFileSync(path.join(baselines, 'reload.ts'), 'a\n');
+  // Review abandoned by closing the review editor.
+  fs.writeFileSync(path.join(fixture, 'closed.ts'), 'c1\nc2\n');
+  fs.writeFileSync(path.join(baselines, 'closed.ts'), 'c1\n');
+  // File created from scratch: baseline exists but is empty.
+  fs.writeFileSync(path.join(fixture, 'fresh.ts'), 'created\nby agent\n');
+  fs.writeFileSync(path.join(baselines, 'fresh.ts'), '');
+  // Deletion-only change: nothing to retype, acknowledged with one action.
+  fs.writeFileSync(path.join(fixture, 'removed.ts'), 'keep\n');
+  fs.writeFileSync(path.join(baselines, 'removed.ts'), 'keep\ngone\n');
+  // Reviewed with the fill-next-word control only.
+  fs.writeFileSync(path.join(fixture, 'word.ts'), 'w1\nconst sum = add(a, b);\n');
+  fs.writeFileSync(path.join(baselines, 'word.ts'), 'w1\n');
+  // Review parked partway through by starting another file, then resumed.
+  fs.writeFileSync(path.join(fixture, 'parked.ts'), 'pa1\npa2\npa3\n');
+  fs.writeFileSync(path.join(baselines, 'parked.ts'), 'pa1\n');
+  // The other file, started (and dropped) while the one above waits.
+  fs.writeFileSync(path.join(fixture, 'other.ts'), 'ob1\nob2\n');
+  fs.writeFileSync(path.join(baselines, 'other.ts'), 'ob1\n');
+  // Retyped while the animation level is changed underneath the live review.
+  fs.writeFileSync(path.join(fixture, 'animated.ts'), 'an1\nan2\n');
+  fs.writeFileSync(path.join(baselines, 'animated.ts'), 'an1\n');
+
+  // Only visible when comparing against git: committed, then changed, with no
+  // snapshot behind it — the case the tracked queue cannot see at all.
+  fs.writeFileSync(path.join(fixture, 'gitonly.ts'), 'g1\n');
+  commitFixture(fixture);
+  fs.writeFileSync(path.join(fixture, 'gitonly.ts'), 'g1\ng2\n');
 
   await runTests({
     extensionDevelopmentPath,
@@ -39,9 +83,9 @@ async function main(): Promise<void> {
   const state = JSON.parse(
     fs.readFileSync(path.join(fixture, '.copyworkcode', 'state.json'), 'utf8')
   );
-  if (state.reviews.length !== 3) {
+  if (state.reviews.length !== 12) {
     throw new Error(
-      `expected 3 review records in the fixture, found ${state.reviews.length}`
+      `expected 12 review records in the fixture, found ${state.reviews.length}`
     );
   }
   const advanced = fs.readFileSync(path.join(baselines, 'sample.ts'), 'utf8');
@@ -49,6 +93,27 @@ async function main(): Promise<void> {
     throw new Error('sample.ts baseline was not advanced by the typed review');
   }
   console.log('Integration suite side effects verified.');
+}
+
+/**
+ * Turns the fixture into a repository with one commit, so the suite can drive
+ * the git comparison mode. The runtime data directory is excluded the same way
+ * enabling a workspace excludes it, keeping it out of the git-mode queue.
+ */
+function commitFixture(fixture: string): void {
+  const git = (...args: string[]): void => {
+    const done = spawnSync('git', args, { cwd: fixture, encoding: 'utf8' });
+    if (done.status !== 0) {
+      throw new Error(`git ${args.join(' ')} failed: ${done.stderr ?? done.error}`);
+    }
+  };
+  git('init', '-q');
+  git('config', 'user.email', 'fixture@example.com');
+  git('config', 'user.name', 'Fixture');
+  git('config', 'commit.gpgsign', 'false');
+  fs.writeFileSync(path.join(fixture, '.git', 'info', 'exclude'), '.copyworkcode/\n');
+  git('add', '-A');
+  git('commit', '-q', '-m', 'fixture');
 }
 
 main().catch((err) => {

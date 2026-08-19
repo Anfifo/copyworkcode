@@ -12,9 +12,9 @@ promoted here when they're deemed worth building.
 - [ ] **Strictness setting for retype matching** — the permissive mode from design.md:
       deliberate deviation stops counting as a mismatch and feeds the stale-context
       re-sync flow (see "Later"). Current behavior is strict-only.
-- [ ] **Content-exclusion globs at the capture layer** — the hook must record only the
-      occurrence (never the content) for matching files, so secrets are never duplicated
-      into the event log.
+- [ ] **Per-project override for content exclusion** — the exclusion patterns are fixed;
+      a project keeping secrets under a name the list doesn't cover has no way to add it,
+      and no way to reclaim a source file the list catches by mistake.
 - [ ] **Intent extraction** — follow the recorded `transcriptPath` + `toolUseId` back to
       the assistant message that made the change and surface its stated reasoning next to
       the diff. Extract eagerly, near capture time — transcripts get compacted or
@@ -32,6 +32,8 @@ promoted here when they're deemed worth building.
 - [ ] Review stats: typed vs. skipped ratios over time, per file area.
 - [ ] Adapters for more agents beyond the first integration.
 - [ ] Events view should also show reviewed/skipped history, not only pending items.
+- [ ] Sections as expandable rows under each file in the queue, so a click can open
+      the review at one specific section instead of the first one.
 - [ ] Multi-root workspace support (currently first folder only).
 
 ## Before going public / Marketplace

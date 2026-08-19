@@ -55,15 +55,28 @@ the goal of each change before editing.
 
 ### Quick-fill for low-value regions
 
-Beyond fill-next-line: a fill-region control for boilerplate the user recognizes at a
-glance (import blocks, generated tables, mechanical renames), recorded as its own status
-("filled") distinct from typed and skipped.
+Beyond fill-word and fill-line: a fill-region control for boilerplate the user recognizes
+at a glance (import blocks, generated tables, mechanical renames), recorded as its own
+status ("filled") distinct from typed and skipped.
 
 - **Upside:** keeps friction proportional to learning value; probably the difference
   between the tool feeling fair and feeling like punishment on mechanical changes.
 - **Downside:** every convenience is a hole in goals 1–3; a too-easy fill becomes the
   default gesture. Needs limits (size cap? per-review quota?) before it exists.
-- **Status:** design alongside the retype experience, not after it.
+- **Status:** the per-word and per-line fills exist (both counted as skipped, never as
+  typed); the region-sized fill and a distinct "filled" status stay parked until real use
+  shows where the line between fair and too-easy sits.
+
+### Resuming a parked review by focusing its editor
+
+Parked reviews resume when the file is opened from the queue. They could instead resume the
+moment their editor becomes the active one, making the switch gestureless.
+
+- **Upside:** moving between two half-reviewed files costs nothing at all.
+- **Downside:** tabbing to a file would silently make it read-only and repaint it with the
+  review overlay, which is a lot of behavior to attach to a click on a tab.
+- **Status:** parked. The explicit gesture is one click and says what it does; revisit if
+  switching between files in one sitting turns out to be common.
 
 ## Rejected (kept for the record)
 

@@ -43,10 +43,42 @@ Key properties:
   activation if the editor was closed during the session.
 - **Intent is recoverable.** The hook records the session transcript path and tool-use id,
   so the extension can later extract the assistant's stated reasoning for that specific
-  change and show it during review.
-- **Setup is automated.** The extension installs the hook config on the user's behalf
-  (one consent prompt) — no manual settings editing. The hook script no-ops in workspaces
-  that haven't enabled the extension, so it's safe to install user-wide.
+  change and show it during review. What is stored is the pointer, not the conversation:
+  the transcript remains the agent's own file, read on demand if a review asks for it.
+- **Credentials are never copied.** Capture duplicates content by design — a baseline holds
+  the pre-change version of a file and the event log holds the text of each edit — so a
+  credentials file would end up written down twice over, inside a directory the workspace
+  deliberately hides from `git status`. Files matching the exclusion list get neither: no
+  baseline snapshot, no content in the event, and therefore no review debt, since a file
+  with no baseline has none. The occurrence is still recorded, so an agent touching one is
+  never invisible; only the text is withheld. The list is deliberately broad, because a
+  false positive costs one un-reviewable file while a false negative writes a private key
+  to disk — tempered in one place, where the `secret`/`credential` name rule applies to
+  data and config files but not to source files, which are exactly what you want to
+  review. The queue applies the same list independently, since git mode reports changes
+  the hook never saw.
+- **Capture is off until asked for, and reversible.** A single application-scoped setting
+  (`copyworkcode.agentCapture`) is the only expression of intent; the extension's job is to
+  make the settings file match it, installing the hook when it goes on and removing it when
+  it goes off. Nothing is installed on activation, on enabling a workspace, or from a
+  notification. An earlier version offered the hook in a one-click prompt when a workspace
+  was enabled, and that was wrong for what it was asking: the file is global to every
+  project and every terminal the agent runs in, which is precisely why one entry suffices
+  and precisely why it should not be the by-product of dismissing a toast. Putting both
+  directions in one toggle also means the way out is as discoverable as the way in — a tool
+  that edits a config it doesn't own has to be removable by whoever it surprised.
+- **The setting decides, so the two never drift.** Both palette commands write the setting
+  rather than the file, and the hook is reconciled against it on activation and on every
+  change. A machine that receives the preference through settings sync installs the hook
+  itself, and the reconcile is idempotent in both directions — with capture off, the
+  default, it returns without opening the settings file at all.
+- **The settings file is never left half-written.** It belongs to the user and holds far
+  more than this hook, so edits are surgical (entries are matched by script name, since the
+  extension's install path moves with every update, and anything sharing an event or an
+  entry is preserved) and the write goes to a temporary file renamed over the target, which
+  is atomic within a directory. A failed write leaves the original intact.
+- **It records only where invited.** The hook script no-ops in workspaces that haven't
+  enabled the extension, so one user-wide entry never means recording everywhere.
 
 ### Layer 2 — editor heuristics (tool-agnostic fallback)
 
@@ -96,6 +128,39 @@ Consequences:
   agent-made.
 - Baselines must be git-aware eventually (branch switches change files without anyone
   "editing" them); v1 may accept weirdness there, but it's a known hole, not a surprise.
+  The git comparison mode below is not that fix, though it is a way out when snapshots
+  have gone wrong: it ignores them entirely.
+
+### Comparing against git instead
+
+Snapshots only exist for changes something was watching. Work that landed while the
+extension was off — or before it was installed — has no snapshot and therefore no debt,
+so the queue reads "all clear" when there is plenty to review. The queue's header
+therefore has a second mode: it switches the compared-against side from the last-reviewed
+snapshot to the working tree's diff against a git revision (`HEAD` by default,
+`copyworkcode.gitRef` for anything else). Everything downstream is untouched — same
+sections, same retype flow, same on-demand diff — only the left-hand side differs.
+
+It is an override, not a migration:
+
+- Switching never touches the snapshot store, so the tracked queue returns exactly as it
+  was. A half-reviewed backlog cannot be lost by looking at git for a while.
+- Completing or skipping a review always advances the file's snapshot, in either mode.
+  That is what lets a reviewed file leave both queues. Git keeps reporting the change
+  until it is committed, so the git queue additionally hides files whose snapshot already
+  matches what is on disk.
+- The two queues answer different questions, and their contents differ on purpose: a
+  committed-but-never-reviewed change is tracked debt and not a git change; an edit you
+  made yourself is a git change and not tracked debt.
+- Files git doesn't track yet are included, ignore rules still applying, so a file created
+  from scratch reviews as one whole-file section. Binary files are left out — nothing to
+  retype.
+- The header names the revision while the mode is on. A queue that quietly answered a
+  different question would be worse than no queue.
+
+Git runs as a child process, which keeps the dependency to git being on `PATH` and nothing
+else. A folder with no repository, or a revision that doesn't exist, refuses the switch
+rather than showing an empty queue that reads as "all clear".
 
 ## Enforcement model: apply-now, retype-to-clear
 
@@ -106,27 +171,123 @@ makes the review metric "debt cleared" rather than "gate passed".
 
 ## Review UI: real editor, not a webview
 
-The review experience opens the actual file in a diff view against its baseline,
-auto-jumps to the next unreviewed section, and guides retyping in place — with
-skip-section (Alt+S) and fill-next-line (Alt+F) controls, and Shift+Esc to stop. Built on
-real text editors with decorations (not a webview) so IntelliSense, navigation, and every
-language feature keep working while reviewing. The user can freely look around the rest
-of the file mid-review.
+The review opens the actual file in a **normal editor** — not a diff view — and guides
+retyping in place, walking the changed sections top to bottom. An earlier version used
+the diff editor as the review surface and was rejected after real use: the global
+red/green diff painting drowned out every cue the review added, so reviewing felt
+indistinguishable from reading a diff. The review now owns its visuals, and the baseline
+diff is one action away (an editor-title button and a lens action open it side by side)
+instead of being the surface. Built on real text editors with decorations (not a
+webview) so IntelliSense, navigation, and every language feature keep working while
+reviewing. The user can freely look around the rest of the file mid-review.
+
+What the reviewer sees: text not yet typed is dimmed; the active section carries a
+whole-line highlight, a left border, and a scrollbar mark; and the exact run the next
+keystroke should produce is highlighted at the cursor. A lens strip floats above the
+active section with its position and progress ("Section 2/5 — typed 34/120") and
+clickable fill-word (Right), fill-line (Alt+F), skip (Alt+S), show-diff (Alt+D), and stop
+(Shift+Esc) actions. Every control's hover says what it does and ends with its key, so the
+strip stays narrow and nothing has to be memorized to be usable. A mismatched keystroke
+flares on the target it missed and fades out. The status bar mirrors position and
+keybindings; clicking it — or Alt+J — snaps the viewport back to the typing position after
+wandering off to read something else.
+
+Typing has motion, because a surface that only dims and undims text reads as nothing
+happening. An accepted keystroke flashes the run it produced and fades it in over about
+120ms, so the character lands rather than simply appears; typing faster than that leaves a
+short trail of settling characters behind the cursor. Text filled in rather than typed — a
+word, a line, a whole section — gets the same treatment swept left to right, so a fill is
+never mistakable for typing. A mismatch flares on the target it missed and decays over
+about 200ms, which reads as a rejection rather than the static red block it replaced.
+
+Editor decorations compile to generated CSS rules: keyframes cannot be declared, and
+transforms are ignored on inline text spans, so a character cannot be scaled or slid.
+Every effect is therefore frame-stepped from the extension — a ladder of decoration types
+applied to a range in turn, one frame per clock tick — and animates only properties that
+leave layout alone: opacity, background, border, and weight (a monospace bold face carries
+the same advance width, so the impact frame cannot reflow the line). Motion that displaces
+text was
+considered and rejected: the one property that produces it, letter spacing, shifts the
+whole rest of the line with it, and a surface being typed into cannot afford text that
+jumps under the cursor. The clock runs only while something is in flight and the trail is
+bounded, so an idle review costs nothing and a burst of fast typing cannot grow the
+repaint. Animation is strictly decoration — it trails what the matching engine already
+decided and can never delay or change what a keystroke does. `copyworkcode.animations`
+sets the level: `full`, `subtle` (fades only, no flash), or `off`. Extensions get no
+reduced-motion signal from the editor, and a surface that flashes on every keystroke needs
+an off switch that is not a guess about the reader.
+
+The right arrow is a control rather than navigation: inside a review there is nowhere
+useful to move right, since everything to the right is text still owed, so the key fills
+the next word instead — pending whitespace plus a run of identifier characters, or a run
+of adjacent symbols so `=>` and `);` go in one press. It fills only when the cursor is at
+the typing position; with a selection open, or after clicking away to read something else,
+it moves as it always did, so a fill never happens where the reviewer isn't looking. Like
+fill-line, filling is not typing: a section cleared entirely by fills is recorded as
+skipped.
 
 How the in-place retype works, given that changes are already applied to the file
-(apply-now model): the flow walks the changed sections top to bottom; the current
-section's new text is removed from the buffer and the user types it back in, validated
-keystroke by keystroke, with the upcoming text of the line shown as a ghost preview at
-the cursor. Reproducing the section exactly means the file ends the review byte-identical
-to where it started — the typing was the review. Sections that only *removed* lines have
-nothing to retype; they are shown in the diff and confirmed with one click.
+(apply-now model): the buffer keeps its final content for the whole review and is never
+edited by the flow. Each accepted keystroke advances a matching engine, restoring normal
+rendering as the cursor moves. The user reads and reproduces real text in place — the
+typing is the review — but since the buffer never changes, a review cannot dirty,
+truncate, or lose the file, and stopping at any point just drops the overlay. This
+matters most for a file the agent created from scratch (its baseline is empty, so the
+entire file is one section): it reviews the same way, fully visible and dimmed until
+typed, rather than presenting as an alarming empty buffer. Sections that only *removed*
+lines are explicit stops in the walk: nothing to retype, so the lens strip reports how
+many lines were deleted there and offers a one-click confirm, recorded separately from
+typed and skipped counts.
 
 Keystrokes are intercepted with a `type` command override while a review is active. That
 is what guarantees completions, snippets, and auto-closing pairs can never insert text on
 the user's behalf inside the review region — rather than trying to disable each editor
-convenience individually. Any buffer change that doesn't come from the review flow itself
-(undo, a formatter, an agent editing the file mid-review) aborts the review and restores
-the content; debt is left in place.
+convenience individually. The reviewed editor is also marked read-only for the session:
+printable input still reaches the override (the editor dispatches the `type` command
+before its read-only check), while every editing gesture that bypasses it — backspace,
+paste, drag-and-drop, line moves, undo, anything unforeseen — is inert instead of
+editing the buffer behind the engine's back and killing the review. Blocking by
+enumerating keybindings was tried first and rejected: the list can never be complete,
+and every miss aborts someone's review. Enter and Tab are dispatched as editor commands
+rather than `type` input, so both are rebound — scoped to the reviewed editor only — to
+route through the matching engine and snap whitespace like any other formatting
+keystroke. The read-only flag lifts when the review ends; if the review's editor is
+already gone (its tab was closed), the reset runs when the file next becomes active.
+
+Because the flow makes no edits of its own, any change to the document during a review
+is by definition foreign — a formatter, an agent editing the file mid-review, a reload
+from disk. Foreign changes invalidate the section offsets, so the review stops; the new
+content is kept untouched and the debt stays in place.
+
+One review is live at a time, but a review is not a commitment. Starting another file
+**parks** the current one — its section, its position inside that section, and its
+counters — and coming back resumes exactly there. Parking is not an outcome: nothing is
+written, nothing is logged, and the file keeps its place in the queue with its position on
+its row. An earlier version refused the second file outright ("a review is already in
+progress"), which made every other file unreachable until the first was stopped and lost;
+freedom to move matters more than a tidy single-session model. A parked position describes
+offsets in the content it was parked on, so a file that changed in the meantime starts its
+walk over rather than typing into stale offsets.
+
+Closing the review tab parks as well — an accidental tab close is not a decision to throw
+away typing — while stopping deliberately discards the position, so the next review of that
+file starts clean. There are three visible ways to stop: Shift+Esc, a stop button in the
+editor title bar, and the lens strip's Stop action. Marking a file reviewed from the queue
+also drops whatever review state it had, live or parked, since its debt is being cleared
+anyway. The start gate covers the whole async setup, so a doubled gesture (double-click on
+a row, an impatient re-click) still collapses into one review, and asking to review the
+file already under review just jumps back to its typing position.
+
+### The review queue view
+
+One row per file waiting for review, in the extension's own activity-bar panel, biggest
+change first — change size is what a reviewer picks by, so it leads the row: `+12 −3`, then
+the review's position if one is parked there, then how many agent edits are behind it, then
+the directory. A tree row cannot colour its own text, so the colour lives on the icon,
+which doubles as the shape of the change: additions only, deletions only, or both. The
+hover carries the long form — path, counts against whatever the current baseline is, parked
+position, agent edits, when it was last reviewed and how — the container badge carries the
+pending count, and one inline button marks a file reviewed without typing it.
 
 ### Retype matching rules
 
@@ -160,10 +321,11 @@ tamper-evidence machinery, and keeps the extension out of surveillance territory
 
 ## Known risks (accepted, tracked)
 
-- **Secrets in the event log.** The hook copies file content into
-  `.copyworkcode/events.jsonl`; an agent editing a credentials file duplicates secrets
-  there. Content-exclusion globs must exist at the *capture* layer (record occurrence,
-  never content), not just at the review layer.
+- **Secrets in an unusually named file.** Content exclusion is pattern-based and not
+  configurable, so a credentials file that matches nothing on the list is still copied into
+  a baseline and the event log. The patterns cover the conventional names; a project that
+  keeps its secrets somewhere idiosyncratic is not protected, and there is no per-project
+  override yet.
 - **Intent quality.** The transcript text preceding a tool call is often thin ("now let
   me fix the import"). Intent must be extracted eagerly (transcripts get compacted or
   deleted), and genuinely useful rationale may need users to nudge their agent's
@@ -175,15 +337,24 @@ tamper-evidence machinery, and keeps the extension out of surveillance territory
 ## Repo layout
 
 - `src/` — extension source (TypeScript). `src/core/` holds editor-independent logic
-  (diff, retype matching, baseline store, event-log parsing) so it can be unit-tested
-  with plain Node.
+  (diff, retype matching, baseline store, event-log parsing, git baseline reads, agent
+  settings transforms) so it can be unit-tested with plain Node. `src/typingFx.ts` owns the retype overlay's animation, kept out of the
+  controller so the review flow never interleaves timing concerns with matching.
 - `hook/` — standalone hook script installed into agent tooling (plain Node, no deps).
 - `test/` — unit tests (`npm test`, Node's built-in runner). The hook script is tested
-  end-to-end by spawning it as a subprocess with realistic payloads.
+  end-to-end by spawning it as a subprocess with realistic payloads; installing and
+  removing it are tested as pure transforms over a settings object, including the cases
+  that must survive untouched — somebody else's hooks on the same event, or in the same
+  entry.
 - `test-integration/` — extension-host tests (`npm run test:integration`): boots a real
   editor against a fixture workspace and drives a full retype review, section skip,
-  file skip, and abort through the command layer.
+  file skip, word fills, parking and resuming a review, a review that runs across two
+  animation-level changes, and abort through the command layer.
+- `scripts/seed-demo.js` — rebuilds `demo-workspace/` (gitignored, `npm run demo:seed`):
+  a small workspace with pre-made baselines and pending debt, one file per interesting
+  review case, so the review flow can be tried by hand without an agent session. The
+  "Run Extension (Demo)" launch configuration seeds and opens it in one go.
 - `.copyworkcode/` — per-workspace runtime data (event queue, baselines, review state).
   Never committed: enabling a workspace adds it to the repo-local exclude list
-  (`.git/info/exclude`), which hides it from `git status` without touching the project's
-  `.gitignore` or prompting anyone.
+  (`.git/info/exclude`), which hides it from `git status` without editing the project's
+  own `.gitignore` — a tracked file that belongs to everyone working on the repository.
