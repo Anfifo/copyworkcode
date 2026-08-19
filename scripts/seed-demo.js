@@ -21,8 +21,27 @@ const path = require('path');
 const root = path.join(__dirname, '..', 'demo-workspace');
 const baselines = path.join(root, '.copyworkcode', 'baselines');
 
-fs.rmSync(root, { recursive: true, force: true });
+reset(root);
 fs.mkdirSync(baselines, { recursive: true });
+
+// Clear the workspace out. An editor watching the folder — which it is, since
+// the folder lives in the repo you are editing — can hold a handle on the
+// directory itself for a moment, and removing it outright then fails with
+// EBUSY. Emptying it is just as good a reset and does not need the directory to
+// go away, so that is the fallback rather than an error the reseed dies on.
+function reset(dir) {
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+    return;
+  } catch (err) {
+    if (err.code !== 'EBUSY' && err.code !== 'EPERM' && err.code !== 'ENOTEMPTY') {
+      throw err;
+    }
+  }
+  for (const entry of fs.readdirSync(dir)) {
+    fs.rmSync(path.join(dir, entry), { recursive: true, force: true });
+  }
+}
 
 // Baseline naming convention shared with src/core/baselineStore.ts:
 // workspace-relative path, forward slashes, percent-encoded.
