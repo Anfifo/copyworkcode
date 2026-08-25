@@ -6,7 +6,6 @@ import { ReviewLog } from './reviewState';
 import { DebtMode, DebtSource } from './debtSource';
 import { DebtDecorations, DebtTreeProvider } from './debtView';
 import { RetypeController, BASELINE_SCHEME, REMOVED_SCHEME } from './retypeController';
-import { AmbientDebt } from './ambient';
 import { syncCaptureHook } from './hookInstaller';
 import { matchesAny } from './core/glob';
 import { advanceBaseline, readBaseline } from './core/baselineStore';
@@ -18,7 +17,6 @@ let log: ReviewLog | undefined;
 let source: DebtSource | undefined;
 let tree: DebtTreeProvider | undefined;
 let retype: RetypeController | undefined;
-let ambient: AmbientDebt | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
@@ -195,13 +193,6 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
   log = new ReviewLog(root);
   source = new DebtSource(root, context.workspaceState);
   retype = new RetypeController(log, source);
-  // The changed-since-baseline highlight is the review surface at rest: it needs
-  // no session, and it steps aside for the file a review is actually driving.
-  ambient = new AmbientDebt(
-    source,
-    () => retype?.reviewedDocument,
-    context.extensionUri
-  );
   const decorations = new DebtDecorations();
   tree = new DebtTreeProvider(
     root,
@@ -216,29 +207,21 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
   });
   tree.attach(view);
 
-  const refresh = (): void => {
-    tree?.refresh();
-    // Baselines only move when a review lands or a file is skipped, both of
-    // which come through here — so this is where the ambient diffs go stale.
-    ambient?.invalidate();
-  };
-
   context.subscriptions.push(
     queue,
     log,
     source,
     retype,
-    ambient,
     decorations,
     view,
     vscode.window.registerFileDecorationProvider(decorations),
     queue.onDidAddEvents((events) => {
       autoSkip(root, events);
-      refresh();
+      tree?.refresh();
     }),
-    log.onDidChange(() => refresh()),
+    log.onDidChange(() => tree?.refresh()),
     source.onDidChangeMode(() => tree?.refresh()),
-    retype.onDidFinish(() => refresh()),
+    retype.onDidFinish(() => tree?.refresh()),
     vscode.workspace.onDidSaveTextDocument(() => tree?.refresh()),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('copyworkcode.gitRef')) tree?.refresh();
@@ -291,5 +274,4 @@ export function deactivate(): void {
   source = undefined;
   tree = undefined;
   retype = undefined;
-  ambient = undefined;
 }

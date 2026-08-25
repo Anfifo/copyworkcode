@@ -494,25 +494,6 @@ anyway. The start gate covers the whole async setup, so a doubled gesture — a 
 a row, an impatient re-click — still collapses into one review, and asking to review the file
 already under review just jumps back to its typing position.
 
-### Ambient change highlight
-
-Independently of any review: the changed regions of **any** open file are marked against that
-file's baseline — a light dim, a gutter icon and a scrollbar mark, with no session, no engine
-and no lock (`copyworkcode.ambientHighlight`, on by default). This is the tool at rest, and it
-serves a second use for it: an easier way to look at what changed recently, with no commitment
-to review anything. On by default, because a feature that has to be switched on to be noticed
-is not the tool at rest.
-
-It keeps the review's polarity — changed code is the dimmed side, because that is what typing
-over it undims — at a lighter dim than a review uses, so the two never read as the same state.
-Full dim keeps its one meaning: under review, still owed. Inverting the ambient layer (dimming
-the *unchanged* context so changes pop) reads better as a pure review surface and was rejected
-for exactly that reason: it makes changed code the bright side, and the metaphor the product
-runs on is that unreviewed code is dim until you give it life by typing it. The file under
-review is excluded — its own overlay says more, and two dimming layers over one buffer
-compound into a third shade that means nothing. Diffs are cached per document version and
-coalesced to a pause in typing, and a file past a size cap is skipped.
-
 ### Fills: what the flow hands you, and what it advertises
 
 Filling is not typing: a section cleared entirely by fills is recorded as skipped.
@@ -654,9 +635,8 @@ tamper-evidence machinery, and keeps the extension out of surveillance territory
   event-log parsing, git baseline reads, agent settings transforms) so it can be
   unit-tested with plain Node. `src/core/sections.ts` is the one that has to be right for
   the review to survive an editable buffer, which is why it is pure. `src/typingFx.ts`
-  owns the retype overlay's animation and `src/ambient.ts` the no-session change
-  highlight, both kept out of the controller so the review flow never interleaves timing
-  or whole-workspace concerns with matching. `src/removalMark.ts` owns the mark for removed
+  owns the retype overlay's animation, kept out of the controller so the review flow never
+  interleaves timing concerns with matching. `src/removalMark.ts` owns the mark for removed
   lines, a module of its own because its geometry is the one part of the overlay that can be
   got wrong rather than merely look wrong, and it is worth testing on its own.
   `src/changeSetPanel.ts` hosts the change set page: the webview, the files the document is

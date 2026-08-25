@@ -102,14 +102,22 @@ Sections as a strict sequence, with the flow always pointing at "the next one".
   rule (2026-08-19, see design.md). Parking went with it: per-section progress *is* the
   state, and the byte-identical resume check it depended on answers the wrong question.
 
-### Inverting the ambient highlight
+### Marking changed code outside a review
 
-Dimming the *unchanged* context in an open file so the changed code pops, rather than
-dimming the changed code.
+A layer that marked every open file's changes against its baseline with no review running —
+a light dim, a gutter icon, a scrollbar mark and the removal boundary — as "the tool at
+rest", and a way to look at recent changes without committing to review them.
 
-- **Why rejected:** it reads better as a pure review surface, but it makes changed code the
-  bright side — and the metaphor the product runs on is that unreviewed code is dim until
-  you give it life by typing it. Same polarity as review mode, lighter dim (2026-08-19).
+- **Why rejected:** built, lived with, and removed (2026-08-20). It spoke the review
+  surface's language outside a review: the removal mark was the same decoration, and once
+  the review's dim was lightened so the next character stayed legible, the two shades were
+  near-neighbours. Nothing on screen said which state you were in, which is the one thing
+  these visuals have to say. The queue, the file-decoration tint and Alt+D already answer
+  "what changed here" without dressing an ordinary editor as a review. A variant that
+  inverted the polarity — dimming the *unchanged* context so changes pop — was rejected
+  before that (2026-08-19) for its own reason: it makes changed code the bright side, and
+  the metaphor the product runs on is that unreviewed code is dim until you give it life by
+  typing it.
 
 ### Rebuilding the review queue as a webview
 

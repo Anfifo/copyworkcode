@@ -326,12 +326,6 @@ export class RetypeController implements vscode.Disposable {
     return this.session !== undefined;
   }
 
-  /** The document under review, so the ambient layer can leave it alone — the
-   * review's own dimming is the authority on that file. */
-  get reviewedDocument(): vscode.TextDocument | undefined {
-    return this.session?.document;
-  }
-
   async start(root: string, file: string): Promise<void> {
     if (this.starting) {
       return; // doubled invocation of the same gesture — first one wins

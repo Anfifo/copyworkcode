@@ -412,11 +412,6 @@
           "type": "boolean",
           "default": false,
           "description": "Open a review with editing already enabled: the change is still dimmed and still has to be reviewed, but the file is yours to write from the first keystroke, and Ctrl+E is what turns typing guidance on. Off by default, where a review starts by matching your keystrokes against the change and refusing every other way of changing the file until you ask for the editor."
-        },
-        "copyworkcode.ambientHighlight": {
-          "type": "boolean",
-          "default": true,
-          "description": "Mark the regions of any open file that changed since its review baseline, with a light dim, a gutter icon and a scrollbar mark. Works with no review session, so a file an agent touched reads as changed just by opening it. The file being reviewed is excluded — its own overlay says more."
         }
       }
     }

@@ -48,9 +48,6 @@ Early development, but the core loop works end to end:
 - **Walk it in any order.** Sections aren't a queue — click into any of them and start
   typing. Finishing one still moves you to the next, so you can also just keep typing and
   be led through the file.
-- **See what changed without reviewing anything.** Changed regions of any open file are
-  marked against the baseline — a light dim, a gutter icon, a scrollbar mark — with no
-  review started. It doubles as a quieter way to look at what an agent just did.
 - **Skippable at every scale.** Fill the next word or the rest of a line, skip a section or
   a whole file, or set globs for files you never want to review. Filled text is never
   counted as typed.
