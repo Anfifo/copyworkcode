@@ -99,6 +99,9 @@ async function main(): Promise<void> {
   // like any other: the caret goes to where the typing goes.
   fs.writeFileSync(path.join(fixture, 'retouch.ts'), 't1\nabcdef\n');
   fs.writeFileSync(path.join(baselines, 'retouch.ts'), 't1\n');
+  // Reset partway through, with nothing written by hand to discard.
+  fs.writeFileSync(path.join(fixture, 'resetme.ts'), 's1\nsecond\nthird\n');
+  fs.writeFileSync(path.join(baselines, 'resetme.ts'), 's1\n');
   // Reviewed with the fill-next-word control only.
   fs.writeFileSync(path.join(fixture, 'word.ts'), 'w1\nconst sum = add(a, b);\n');
   fs.writeFileSync(path.join(baselines, 'word.ts'), 'w1\n');

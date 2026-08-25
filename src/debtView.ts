@@ -75,7 +75,11 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
     item.description = bits.join(' · ');
 
     item.tooltip = this.tooltip(file, added, removed, events, progress, row);
-    item.contextValue = 'copyworkcode.file';
+    // The row under review answers to one action the others cannot: there is
+    // no progress to reset on a file whose review hasn't started.
+    item.contextValue = progress
+      ? 'copyworkcode.file.reviewing'
+      : 'copyworkcode.file';
     item.command = {
       command: 'copyworkcode.reviewFile',
       title: 'Review by Retyping',
@@ -132,55 +136,61 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
 }
 
 /**
- * Colours the filename of a queued file by the shape of its change: added,
- * deleted, or both. A tree row cannot colour part of its own text, so the
- * `+N −M` counts stay in the row's uncoloured description — a native tree view
- * has no way to tint them, and rebuilding the queue as a webview to get it
- * would cost the file-icon theme, the container badge, and the welcome content.
+ * Tints the filename of the file being reviewed right now, and nothing else.
  *
- * The same tint reaches the Explorer and the editor tabs, since decorations are
- * per-URI and not per-view. That is a side effect rather than the goal, but a
- * welcome one: a file with unreviewed changes reads as one everywhere.
+ * An earlier version coloured every queued row by the shape of its change —
+ * green for additions, red for deletions, blue for both — which put the panel's
+ * one colour on the least useful axis. All three said exactly the same thing
+ * about review state ("not reviewed"), they differed only on information the
+ * row already prints as `+N −M` right beside the name, and green in particular
+ * read as *done* when it meant the opposite. Colour now carries review state
+ * instead: one hue, one meaning, and the only state a row can be in that is
+ * worth pointing at, since a finished file leaves the queue on its own.
+ *
+ * A tree row cannot colour part of its own text, so the counts stay in the
+ * row's uncoloured description — a native tree view has no way to tint them,
+ * and rebuilding the queue as a webview to get it would cost the file-icon
+ * theme, the container badge, and the welcome content.
+ *
+ * The tint reaches the Explorer and the editor tabs too, since decorations are
+ * per-URI and not per-view: while a review is open, that file reads as the one
+ * being worked on wherever it appears.
  */
 export class DebtDecorations
   implements vscode.FileDecorationProvider, vscode.Disposable
 {
   private emitter = new vscode.EventEmitter<vscode.Uri[]>();
   readonly onDidChangeFileDecorations = this.emitter.event;
-  private shapes = new Map<string, DebtRow>();
+  /** Queued files, as the ledger of which URIs to re-ask about. The tint no
+   * longer depends on a row's contents, only on which file is under review. */
+  private queued = new Set<string>();
+
+  constructor(private underReview: (file: string) => boolean) {}
 
   update(rows: readonly DebtRow[]): void {
-    const touched = new Set([...this.shapes.keys()]);
-    const next = new Map<string, DebtRow>();
-    for (const row of rows) {
-      next.set(row.file, row);
-      touched.add(row.file);
-    }
-    this.shapes = next;
+    // Rows that just left the queue have to be re-asked about as well, or a
+    // reviewed file keeps its tint until something else invalidates it.
+    const touched = new Set(this.queued);
+    this.queued = new Set(rows.map((row) => row.file));
+    for (const file of this.queued) touched.add(file);
     this.emitter.fire([...touched].map((file) => vscode.Uri.file(file)));
   }
 
   provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
-    const row = this.shapes.get(uri.fsPath);
-    if (!row) return undefined;
-    if (row.addedLines > 0 && row.removedLines === 0) {
-      return decoration('addedResourceForeground', 'added, not yet reviewed');
-    }
-    if (row.removedLines > 0 && row.addedLines === 0) {
-      return decoration('deletedResourceForeground', 'deletions not yet reviewed');
-    }
-    return decoration('modifiedResourceForeground', 'changed, not yet reviewed');
+    if (!this.underReview(uri.fsPath)) return undefined;
+    const value = new vscode.FileDecoration(
+      undefined,
+      'CopyWorkCode: being reviewed now'
+    );
+    // The workbench's own list warning colour: the yellow a tree row is meant
+    // to use, so it lands as yellow in a theme rather than as a guess at one.
+    value.color = new vscode.ThemeColor('list.warningForeground');
+    return value;
   }
 
   dispose(): void {
     this.emitter.dispose();
   }
-}
-
-function decoration(color: string, tooltip: string): vscode.FileDecoration {
-  const value = new vscode.FileDecoration(undefined, `CopyWorkCode: ${tooltip}`);
-  value.color = new vscode.ThemeColor(`gitDecoration.${color}`);
-  return value;
 }
 
 function relativeDir(root: string, file: string): string {

@@ -639,14 +639,7 @@ tamper-evidence machinery, and keeps the extension out of surveillance territory
   interleaves timing concerns with matching. `src/removalMark.ts` owns the mark for removed
   lines, a module of its own because its geometry is the one part of the overlay that can be
   got wrong rather than merely look wrong, and it is worth testing on its own.
-  `src/changeSetPanel.ts` hosts the change set page: the webview, the files the document is
-  built from, the baseline advance and the log record. The rules behind it are two core
-  modules — `src/core/changeSet.ts` turns a file's regions into the serializable document the
-  page draws, the one place where the offsets a review works in become the line numbers a
-  reader reads by, and `src/core/changeSetReview.ts` holds what each region owes and what a
-  gesture comes to, including which surface owns a file. Those are the parts that can be got
-  wrong rather than merely look wrong, and the panel is left thin enough to be read at a
-  glance.
+ 
 - `hook/` — standalone hook script installed into agent tooling (plain Node, no deps).
 - `test/` — unit tests (`npm test`, Node's built-in runner). The hook script is tested
   end-to-end by spawning it as a subprocess with realistic payloads; installing and
@@ -661,7 +654,8 @@ tamper-evidence machinery, and keeps the extension out of surveillance territory
   bouncing off an armed editor, and all three landing once editing is enabled — and the
   cases that only exist because the buffer is real: a reload from disk, five foreign writes
   moving the sections underneath a live review, the buffer being replaced wholesale,
-  claiming two sections out of order, and the read-only flag lifting when a review ends. It is also the only place the removal mark can be checked:
+  claiming two sections out of order, resetting one partway through, and the read-only flag
+  lifting when a review ends. It is also the only place the removal mark can be checked:
   decorations are write-only, so what the suite asserts is which line each boundary anchors
   to, which side of it the rule goes, and what the badge beside it reads, against real
   documents with and without a trailing newline. Whether a mark *clears* is asked of the

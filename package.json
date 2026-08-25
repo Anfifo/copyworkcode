@@ -133,6 +133,12 @@
         "command": "copyworkcode.resumeTyping",
         "title": "Back to Typing the Change",
         "category": "CopyWorkCode"
+      },
+      {
+        "command": "copyworkcode.resetReview",
+        "title": "Reset Current Review",
+        "category": "CopyWorkCode",
+        "icon": "$(discard)"
       }
     ],
     "viewsContainers": {
@@ -217,12 +223,17 @@
       "view/item/context": [
         {
           "command": "copyworkcode.skipFile",
-          "when": "view == copyworkcode.debt && viewItem == copyworkcode.file",
+          "when": "view == copyworkcode.debt && viewItem =~ /^copyworkcode\\.file/",
           "group": "inline"
         },
         {
           "command": "copyworkcode.skipFile",
-          "when": "view == copyworkcode.debt && viewItem == copyworkcode.file",
+          "when": "view == copyworkcode.debt && viewItem =~ /^copyworkcode\\.file/",
+          "group": "1_review"
+        },
+        {
+          "command": "copyworkcode.resetReview",
+          "when": "view == copyworkcode.debt && viewItem == copyworkcode.file.reviewing",
           "group": "1_review"
         }
       ],
@@ -302,6 +313,10 @@
         {
           "command": "copyworkcode.resumeTyping",
           "when": "copyworkcode.reviewing && copyworkcode.editing"
+        },
+        {
+          "command": "copyworkcode.resetReview",
+          "when": "copyworkcode.reviewing"
         }
       ]
     },

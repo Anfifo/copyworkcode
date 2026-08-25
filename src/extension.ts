@@ -62,6 +62,12 @@ export function activate(context: vscode.ExtensionContext): void {
       tree?.refresh();
     }),
 
+    vscode.commands.registerCommand(
+      'copyworkcode.resetReview',
+      (item?: { resourceUri?: vscode.Uri }) =>
+        retype?.resetReview(item?.resourceUri?.fsPath)
+    ),
+
     vscode.commands.registerCommand('copyworkcode.useGitBaseline', () =>
       setDebtMode('git')
     ),
@@ -193,7 +199,9 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
   log = new ReviewLog(root);
   source = new DebtSource(root, context.workspaceState);
   retype = new RetypeController(log, source);
-  const decorations = new DebtDecorations();
+  const decorations = new DebtDecorations(
+    (file) => retype?.progressFor(file) !== undefined
+  );
   tree = new DebtTreeProvider(
     root,
     source,
@@ -222,6 +230,9 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
     log.onDidChange(() => tree?.refresh()),
     source.onDidChangeMode(() => tree?.refresh()),
     retype.onDidFinish(() => tree?.refresh()),
+    // Starting a review moves no baseline, but the row that is now under review
+    // has to pick up its tint and its "reviewing N/M" description.
+    retype.onDidStart(() => tree?.refresh()),
     vscode.workspace.onDidSaveTextDocument(() => tree?.refresh()),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('copyworkcode.gitRef')) tree?.refresh();

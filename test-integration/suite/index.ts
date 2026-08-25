@@ -816,6 +816,34 @@ export async function run(): Promise<void> {
   await exec('copyworkcode.abortReview');
   await settle();
 
+  // --- Reset: every section owed again --------------------------------------
+  // With nothing written by hand there is nothing to discard and nothing to
+  // confirm, which is also the only half of the gesture a suite can drive: the
+  // dialog guarding the other half is not something a test can answer.
+  const resetme = await review('resetme.ts');
+  await typeAll('sec');
+  assert.equal(resetme.offsetAt(editorOf('resetme.ts').selection.active), 6);
+  await exec('copyworkcode.resetReview');
+  await settle();
+  assert.equal(
+    resetme.offsetAt(editorOf('resetme.ts').selection.active),
+    3,
+    'the reset puts the caret back at the top of the section'
+  );
+  await type('s');
+  assert.equal(
+    resetme.offsetAt(editorOf('resetme.ts').selection.active),
+    4,
+    'and the section owes its first character again'
+  );
+  assert.equal(
+    resetme.getText(),
+    's1\nsecond\nthird\n',
+    'a reset with nothing written leaves the file exactly as it was'
+  );
+  await exec('copyworkcode.abortReview');
+  await settle();
+
   await exec('copyworkcode.abortReview');
   await settle();
 

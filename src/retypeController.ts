@@ -165,6 +165,9 @@ export class RetypeController implements vscode.Disposable {
    * command invocation (double-click, impatient re-click) can't interleave
    * two setups over the same state. */
   private starting = false;
+  /** True across the span of a reset, so the wholesale document replacement it
+   * performs is not mistaken for a revert from disk. */
+  private resetting = false;
   /** Held only while the review editor is the active one — see
    * `syncTypeOverride`. */
   private typeOverride?: vscode.Disposable;
@@ -177,6 +180,14 @@ export class RetypeController implements vscode.Disposable {
   private emitter = new vscode.EventEmitter<void>();
   /** Fires when a review finishes, ends, or is otherwise torn down. */
   readonly onDidFinish = this.emitter.event;
+  private startEmitter = new vscode.EventEmitter<string>();
+  /** Fires with the file once its review is live. Separate from `onDidFinish`
+   * because starting one moves no baseline: the queue has to redraw (a row is
+   * under review now), but nothing that depends on baselines has gone stale.
+   * The file comes with it because a review starting is also the moment every
+   * other surface has to let go of that one file. */
+  readonly onDidStart = this.startEmitter.event;
+
   /** Text still owed: kept in the buffer, rendered dimmed until typed over.
    * Dim enough to read as still owed, light enough to actually read — the
    * next character has to be legible, because guidance insists on exactly it. */
@@ -434,6 +445,7 @@ export class RetypeController implements vscode.Disposable {
       this.moveCursorTo(first.start, vscode.TextEditorRevealType.InCenter);
     }
     this.updateUi();
+    this.startEmitter.fire(file);
   }
 
   /**
@@ -886,6 +898,93 @@ export class RetypeController implements vscode.Disposable {
     return { claimed: claimedCount(s.sections), total: s.sections.length };
   }
 
+  /**
+   * Start this file's review over: every section owed again from zero, and the
+   * file itself back to the version that was handed over for review.
+   *
+   * Both halves are needed for the gesture to mean anything. Typing writes
+   * nothing to the buffer, so clearing the positions alone would leave the
+   * reviewer's own rewrites sitting in the file and immediately re-derived as
+   * sections — a reset that hands back a different change from the one it was
+   * asked to redo. Restoring the text is what makes the second pass the same
+   * pass. It is also the one thing in the review that destroys work, so it is
+   * the one thing that asks first.
+   */
+  resetReview(file?: string): Promise<void> {
+    return this.serialize(async () => {
+      const s = this.session;
+      if (!s || (file !== undefined && s.file !== file)) {
+        void vscode.window.setStatusBarMessage(
+          'CopyWorkCode: nothing to reset — that file is not being reviewed right now.',
+          4000
+        );
+        return;
+      }
+      // Asked only when there is something to lose. Clearing the positions
+      // destroys no text — it is the gesture the reviewer just asked for, and
+      // a dialog in front of it would be a dialog in front of every reset.
+      // Throwing away what they wrote is a different thing entirely.
+      const written = s.document.getText() !== s.original;
+      if (written) {
+        const answer = await vscode.window.showWarningMessage(
+          `Reset the review of ${path.basename(s.file)}?`,
+          {
+            modal: true,
+            detail:
+              'Every section goes back to unreviewed, and the file goes back to the version being reviewed — anything you wrote here yourself is discarded.',
+          },
+          'Reset'
+        );
+        if (answer !== 'Reset' || this.session !== s) return;
+      }
+
+      this.resetting = true;
+      try {
+        await this.showReview(s);
+        // The read-only flag refuses an edit and a save alike, so it comes off
+        // before either and goes back on at the end.
+        await this.disarm(s);
+        if (written) {
+          const edit = new vscode.WorkspaceEdit();
+          edit.replace(
+            s.document.uri,
+            new vscode.Range(
+              s.document.positionAt(0),
+              s.document.positionAt(s.document.getText().length)
+            ),
+            s.original
+          );
+          await vscode.workspace.applyEdit(edit);
+          try {
+            await s.document.save();
+          } catch {
+            // Disk may be unwritable; the buffer is what the review works on.
+          }
+        }
+        if (!this.rebuild(s)) return;
+      } finally {
+        this.resetting = false;
+      }
+      if (!s.editing) await this.arm(s);
+      this.syncTypeOverride();
+      const first = nextUnclaimed(s.sections);
+      if (first) {
+        s.active = first;
+        this.moveCursorTo(first.start, vscode.TextEditorRevealType.InCenter);
+      }
+      this.updateUi();
+      // The queue prints this review's coverage on its row, and it just went
+      // back to nothing.
+      this.startEmitter.fire(s.file);
+      void vscode.window.setStatusBarMessage(
+        `CopyWorkCode: review of ${path.basename(s.file)} reset — ${
+          s.sections.length
+        } section(s) to review again.`,
+        5000
+      );
+    });
+  }
+
   async forget(file: string): Promise<void> {
     if (this.session?.file === file) {
       await this.stop(
@@ -1067,6 +1166,10 @@ export class RetypeController implements vscode.Disposable {
     s: Session,
     contentChanges: readonly vscode.TextDocumentContentChangeEvent[]
   ): void {
+    // A reset writes the whole document itself and rebuilds once it is done.
+    // Left to this path it would look exactly like a revert from disk, and be
+    // announced as one.
+    if (this.resetting) return;
     const changes = contentChanges.map((change) => ({
       from: change.rangeOffset,
       to: change.rangeOffset + change.rangeLength,
@@ -1579,6 +1682,7 @@ export class RetypeController implements vscode.Disposable {
     this.lensEmitter.dispose();
     this.statusBar.dispose();
     this.emitter.dispose();
+    this.startEmitter.dispose();
   }
 }
 
