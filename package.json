@@ -37,6 +37,12 @@
         "category": "CopyWorkCode"
       },
       {
+        "command": "copyworkcode.openChangeSet",
+        "title": "Open the Change Set Page",
+        "category": "CopyWorkCode",
+        "icon": "$(book)"
+      },
+      {
         "command": "copyworkcode.skipFile",
         "title": "Mark Reviewed Without Typing",
         "category": "CopyWorkCode",
@@ -200,6 +206,11 @@
       ],
       "view/title": [
         {
+          "command": "copyworkcode.openChangeSet",
+          "when": "view == copyworkcode.debt && copyworkcode.enabled",
+          "group": "navigation@0"
+        },
+        {
           "command": "copyworkcode.useGitBaseline",
           "when": "view == copyworkcode.debt && copyworkcode.enabled && copyworkcode.debtMode != git",
           "group": "navigation@1"
@@ -296,6 +307,10 @@
         },
         {
           "command": "copyworkcode.reviewNextFile",
+          "when": "copyworkcode.enabled"
+        },
+        {
+          "command": "copyworkcode.openChangeSet",
           "when": "copyworkcode.enabled"
         },
         {

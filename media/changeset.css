@@ -1,0 +1,300 @@
+/*
+ * The change set page. Two rules run through all of it.
+ *
+ * One: the colour language is the review's, not a diff's. Code still owed is
+ * dimmed and comes up to full strength as it is typed; lines the change took
+ * away are drawn in the deleted-resource colour. Nothing else is coloured, so
+ * whatever is loudest on the page is always the work — the same reason the
+ * review left the diff editor, where global red and green drowned every cue out.
+ *
+ * Two: every colour comes from the theme. A page that ships its own palette is
+ * a page that looks wrong in half the themes it opens in.
+ */
+
+:root {
+  /* The line-number gutter, page-wide: every row, and every strip that has to
+     line up with the code beside it, measures from this one number. */
+  --num-width: 5.5em;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-editor-background);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+}
+
+.muted {
+  color: var(--vscode-descriptionForeground);
+}
+
+/* --- the bars ------------------------------------------------------------- */
+
+.bar {
+  position: sticky;
+  z-index: 2;
+  display: flex;
+  gap: 1em;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6em 1.2em;
+  background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+}
+
+.bar.top {
+  top: 0;
+  /* Fixed height, because the file headings stick directly underneath it and
+     have to know where it ends. */
+  box-sizing: border-box;
+  min-height: 3.6em;
+  border-bottom: 1px solid var(--vscode-panel-border, transparent);
+}
+
+.bar.bottom {
+  bottom: 0;
+  border-top: 1px solid var(--vscode-panel-border, transparent);
+  font-size: 0.9em;
+}
+
+.titles h1 {
+  margin: 0;
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+.titles p {
+  margin: 0.2em 0 0;
+  font-size: 0.9em;
+}
+
+button {
+  border: none;
+  border-radius: 2px;
+  padding: 0.35em 0.8em;
+  font-family: inherit;
+  font-size: 0.9em;
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+button.secondary {
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+}
+
+button.secondary:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+/* --- files ---------------------------------------------------------------- */
+
+#doc {
+  padding: 0 0 3em;
+  outline: none;
+}
+
+#doc:empty::after {
+  content: 'Nothing is waiting for review.';
+  display: block;
+  padding: 2.5em 1.2em;
+  color: var(--vscode-descriptionForeground);
+}
+
+.file {
+  border-bottom: 1px solid var(--vscode-panel-border, transparent);
+}
+
+.file-head {
+  position: sticky;
+  top: 3.6em;
+  z-index: 1;
+  display: flex;
+  gap: 0.8em;
+  align-items: baseline;
+  padding: 0.7em 1.2em;
+  background: var(--vscode-editor-background);
+  border-bottom: 1px solid var(--vscode-panel-border, transparent);
+}
+
+.file-head .path {
+  font-weight: 600;
+}
+
+.file-head .counts,
+.file-head .progress {
+  font-size: 0.9em;
+}
+
+.file-head .added-count {
+  color: var(--vscode-gitDecoration-addedResourceForeground);
+}
+
+.file-head .removed-count {
+  color: var(--vscode-gitDecoration-deletedResourceForeground);
+}
+
+.file.done .file-head .path {
+  text-decoration: line-through;
+  color: var(--vscode-descriptionForeground);
+}
+
+/* --- code ----------------------------------------------------------------- */
+
+.code-block {
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size);
+  line-height: 1.45;
+  tab-size: 4;
+}
+
+.row {
+  display: flex;
+  white-space: pre;
+}
+
+.row .n {
+  flex: none;
+  box-sizing: border-box;
+  width: var(--num-width);
+  padding: 0 1em 0 1.2em;
+  text-align: right;
+  user-select: none;
+  color: var(--vscode-editorLineNumber-foreground);
+}
+
+.row .text {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-right: 1.2em;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* Surviving code around a change: plain, and quiet by being plain. */
+.context .row .text {
+  color: var(--vscode-editor-foreground);
+}
+
+/* --- gaps ----------------------------------------------------------------- */
+
+.gap {
+  display: block;
+  width: calc(100% - 2.4em);
+  margin: 0.15em 1.2em;
+  padding: 0.25em 0;
+  text-align: left;
+  text-indent: calc(var(--num-width) - 1.2em);
+  font-family: inherit;
+  color: var(--vscode-textLink-foreground);
+  background: none;
+  border-top: 1px dashed var(--vscode-panel-border, currentColor);
+  border-bottom: 1px dashed var(--vscode-panel-border, currentColor);
+  border-radius: 0;
+}
+
+.gap:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+/* --- sections ------------------------------------------------------------- */
+
+.section {
+  border-left: 2px solid var(--vscode-panel-border, transparent);
+  transition: background 60ms ease-out;
+}
+
+.section.active {
+  border-left-color: var(--vscode-focusBorder);
+  background: var(--vscode-editor-selectionHighlightBackground);
+}
+
+.section.claimed {
+  border-left-color: transparent;
+}
+
+/* The strip above a region — its progress and its controls, the same place the
+   editor review puts them, for the same reason: the space above a region is
+   where lines the change removed physically were. */
+.lens {
+  display: flex;
+  gap: 0.6em;
+  align-items: center;
+  padding: 0.25em 1.2em 0.25em calc(var(--num-width) - 2px);
+  font-size: 0.85em;
+  color: var(--vscode-descriptionForeground);
+}
+
+.lens button {
+  padding: 0.1em 0.5em;
+  font-size: 0.95em;
+}
+
+.lens .lost {
+  color: var(--vscode-gitDecoration-deletedResourceForeground);
+}
+
+.lens .outcome {
+  font-style: italic;
+}
+
+/* Lines the change took away, shown where they were. No wash of colour behind
+   them: the text itself carries the fact, and a block of highlight this tall
+   would be the loudest thing on the page. */
+.removed .row .n {
+  color: var(--vscode-gitDecoration-deletedResourceForeground);
+}
+
+.removed .row .text {
+  color: var(--vscode-gitDecoration-deletedResourceForeground);
+}
+
+/* Text this region still owes. It comes up to full strength as it is typed —
+   the one piece of feedback the whole surface is built around. */
+.owed {
+  opacity: 0.42;
+}
+
+.covered {
+  opacity: 1;
+}
+
+.caret {
+  display: inline-block;
+  width: 0;
+  border-left: 2px solid var(--vscode-editorCursor-foreground);
+  margin: 0 -1px;
+  animation: blink 1s step-end infinite;
+}
+
+.section:not(.active) .caret {
+  display: none;
+}
+
+@keyframes blink {
+  50% {
+    border-left-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caret {
+    animation: none;
+  }
+}
+
+/* A keystroke that wasn't the one this region owes. */
+.section.wrong {
+  background: var(--vscode-inputValidation-errorBackground);
+}

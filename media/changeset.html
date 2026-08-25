@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src {{cspSource}}; script-src 'nonce-{{nonce}}'; font-src {{cspSource}};"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="{{style}}" />
+    <title>AI Changes to Review</title>
+  </head>
+  <body>
+    <header class="bar top">
+      <div class="titles">
+        <h1 id="title">AI changes to review</h1>
+        <p id="summary" class="muted">Reading the change set…</p>
+      </div>
+      <button id="reload" type="button" class="secondary">
+        Reload the change set
+      </button>
+    </header>
+
+    <main id="doc" tabindex="-1"></main>
+
+    <footer class="bar bottom">
+      <span id="status" class="muted"></span>
+      <span id="keys" class="muted">
+        type the change · Tab fills a word · Alt+F a line · Alt+S skips
+      </span>
+    </footer>
+
+    <script nonce="{{nonce}}" src="{{script}}"></script>
+  </body>
+</html>

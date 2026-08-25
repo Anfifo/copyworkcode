@@ -67,19 +67,21 @@ status ("filled") distinct from typed and skipped.
   typed); the region-sized fill and a distinct "filled" status stay parked until real use
   shows where the line between fair and too-easy sits.
 
-### Aggregate review worksheet
+### Syntax highlighting on the change set page
 
-One synthetic buffer holding every changed region across every file in the queue, reviewed
-top to bottom in a single sitting.
+The page draws code with no syntax colour at all: dim for what is still owed, full strength
+for what has been typed, the deleted-resource colour for what went. A bundled highlighter
+would colour it the way an editor does.
 
-- **Upside:** one surface, no file-switching, and a natural reading order for a large
-  change set.
-- **Downside:** edit mode is the review surface now, and edits have to land in the real
-  file — a freely editable aggregate buffer would have to map every edit back across files,
-  which is the hard part of a multi-file editor. Edit mode argues for a continuous queue
-  walk across real files instead (Alt+N is the beginning of that).
-- **Status:** parked (2026-08-19). Revisit only if a read-only aggregate *preview* turns
-  out to be wanted on its own, separate from reviewing.
+- **Upside:** code reads faster when it is coloured, and the page is the surface with the
+  most code on screen at once.
+- **Downside:** a runtime dependency and a language map to keep, and — the real cost — a
+  second loud colour scheme competing with the only distinction the page exists to draw.
+  That is the mistake the diff-editor surface was rejected for, in a new place.
+- **Status:** parked (2026-08-20) in favour of shipping the review's own colour language
+  first. The page renders every line as its own element, so a highlighter can be dropped in
+  later without changing what the extension sends it. Revisit once real use says whether
+  uncoloured code on the page reads as calm or as flat.
 
 ## Rejected (kept for the record)
 
@@ -126,7 +128,9 @@ A webview queue could colour the `+N −M` counts inline, which a native tree vi
 - **Why rejected:** it costs the file-icon theme (the exact thing being restored when the
   custom row icons were dropped), the container badge, and the native welcome content, all
   for inline colour on two numbers. A file-decoration provider tints the filename instead
-  and the counts stay grey (2026-08-19).
+  and the counts stay grey (2026-08-19). This was about the queue, not about pages: the
+  change set page *is* one, and it earns it by holding a document of code rather than a list
+  of files (see design.md).
 
 ### Per-event replay as the unit of review
 

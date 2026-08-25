@@ -1,8 +1,10 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { ChangeEvent } from './types';
 import { EventQueue } from './eventQueue';
 import { ReviewLog } from './reviewState';
+import { ChangeSetPanel } from './changeSetPanel';
 import { DebtMode, DebtSource } from './debtSource';
 import { DebtDecorations, DebtTreeProvider } from './debtView';
 import { RetypeController, BASELINE_SCHEME, REMOVED_SCHEME } from './retypeController';
@@ -17,13 +19,13 @@ let log: ReviewLog | undefined;
 let source: DebtSource | undefined;
 let tree: DebtTreeProvider | undefined;
 let retype: RetypeController | undefined;
+let changeSet: ChangeSetPanel | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.workspace.registerTextDocumentContentProvider(BASELINE_SCHEME, {
       provideTextDocumentContent: (uri) => source?.baselineFor(uri.query) ?? '',
     }),
-
     // Lines a change deleted, given a document of their own so a panel can show
     // them: the buffer they came from has no room for text that is not there.
     vscode.workspace.registerTextDocumentContentProvider(REMOVED_SCHEME, {
@@ -51,6 +53,10 @@ export function activate(context: vscode.ExtensionContext): void {
       const root = workspaceData.workspaceRoot();
       if (root && retype) return retype.start(root, file);
     }),
+
+    vscode.commands.registerCommand('copyworkcode.openChangeSet', () =>
+      changeSet?.show()
+    ),
 
     vscode.commands.registerCommand('copyworkcode.skipFile', (item?: { resourceUri?: vscode.Uri }) => {
       const file = item?.resourceUri?.fsPath;
@@ -199,6 +205,14 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
   log = new ReviewLog(root);
   source = new DebtSource(root, context.workspaceState);
   retype = new RetypeController(log, source);
+  changeSet = new ChangeSetPanel(context.extensionUri, root, source, log, (file) =>
+    // The page is about to review this file itself, and one surface owns a file
+    // at a time — see changeSetPanel.ts.
+    retype?.forget(
+      file,
+      `review of ${path.basename(file)} ended — the change set page took it over.`
+    ) ?? Promise.resolve()
+  );
   const decorations = new DebtDecorations(
     (file) => retype?.progressFor(file) !== undefined
   );
@@ -220,6 +234,7 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
     log,
     source,
     retype,
+    changeSet,
     decorations,
     view,
     vscode.window.registerFileDecorationProvider(decorations),
@@ -230,9 +245,14 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
     log.onDidChange(() => tree?.refresh()),
     source.onDidChangeMode(() => tree?.refresh()),
     retype.onDidFinish(() => tree?.refresh()),
+    changeSet.onDidFinish(() => tree?.refresh()),
     // Starting a review moves no baseline, but the row that is now under review
-    // has to pick up its tint and its "reviewing N/M" description.
-    retype.onDidStart(() => tree?.refresh()),
+    // has to pick up its tint and its "reviewing N/M" description. It is also
+    // where the change set page lets go of that one file.
+    retype.onDidStart((file) => {
+      tree?.refresh();
+      changeSet?.dropFile(file);
+    }),
     vscode.workspace.onDidSaveTextDocument(() => tree?.refresh()),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('copyworkcode.gitRef')) tree?.refresh();
@@ -285,4 +305,5 @@ export function deactivate(): void {
   source = undefined;
   tree = undefined;
   retype = undefined;
+  changeSet = undefined;
 }

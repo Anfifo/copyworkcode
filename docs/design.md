@@ -180,7 +180,8 @@ out every cue the review added, so reviewing felt indistinguishable from reading
 review now owns its visuals, and the baseline diff is one action away (an editor-title button
 and a lens action open it side by side) instead of being the surface. Built on real text
 editors with decorations so IntelliSense, navigation, and every language feature keep working
-while reviewing.
+while reviewing — which is what this surface is for, and what the second one gives up in
+exchange for holding the whole change set at once (see *The change set page*).
 
 What the reviewer sees: text still owed is dimmed; the section being worked on carries a
 whole-line highlight, a left border, and a scrollbar mark; and the exact run the next
@@ -565,6 +566,98 @@ when there is something to lose: with nothing written by hand, clearing the posi
 exactly what was asked for, and a dialog in front of it would be a dialog in front of every
 reset.
 
+### The change set page
+
+One page, one document: every file with pending debt, in queue order, every changed region in
+it, and the surviving code around each region. It opens from the queue's title bar, and it is
+read top to bottom and typed in place.
+
+It exists because a change set has no reading order in an editor. Twelve files touched in one
+agent session are twelve tabs and twelve reviews taken one at a time, with nothing anywhere
+that says what the session as a whole did. Alt+N walks the queue, but a walk is not a
+document: there is no scrolling back to the thing three files ago that this file's change
+explains. The page is the surface for reading a change set; the editor stays the surface for
+sitting inside one file.
+
+**It is a review surface, not a preview.** Typing on the page counts for exactly what typing
+in an editor counts for — the same regions, the same per-region outcomes, the same record in
+the review log, the same baseline advance. A page that could only show the change would be a
+diff with extra steps.
+
+That it can be a page at all follows from how the editor review works. A matched keystroke
+there inserts nothing: the buffer already holds the final content and the review only walks a
+position through it. So a surface with no buffer gives up nothing by having none — the page
+applies no edit anywhere, and has no file to keep in step with.
+
+Both surfaces build their regions with `buildSections`, so the page's *n*th region of a file is
+the editor's *n*th region of it. What they do not share is offsets. The editor review holds a
+position inside a live buffer and reconciles it against every edit that lands there; the page
+reviews the file as it stood when the page was built. That is also why finishing a file here
+advances its baseline to the content the page read rather than to whatever is on disk by then —
+anything that landed in between comes back as debt on the next pass, which is the truth about
+it.
+
+**One surface owns a file at a time**, and whichever the reviewer asked for last wins: the
+first gesture that *lands* on the page ends an editor review of that file, and starting an
+editor review drops the progress the page had on it. A key the region does not owe is not one
+of those gestures: it changes nothing on the page, so it ends nothing in the editor either. Only the colliding file is affected, never the rest of
+the page. Because the handover is asynchronous, a gesture is worked out before it and applied
+after it, and nothing is applied to a file the page does not own by then — otherwise the first
+keystroke on a file an editor review claimed in that gap would land anyway, leaving both
+surfaces holding progress on it. A gesture whose progress was given up and taken back in the
+same gap is dropped for the same reason: the position it reached was reached from a state that
+is gone. Both surfaces would otherwise finish the same file, and the second finish writes a
+second record over a baseline that already moved. Progress lives in the extension rather than
+in the page, so the tab can be hidden and brought back without losing it. Closing it is a
+different thing and takes the progress with it, because unclaimed progress with no surface
+showing it is progress nobody can reach. For the same reason the document is built once and
+rebuilt only when asked for: a queue redrawing itself under the reviewer would move the text
+they were part way through typing.
+
+What the page can do that a buffer cannot, and what it cannot:
+
+- **Removed lines are shown in place, in full.** In a buffer they have nowhere to live, so a
+  hover holds twelve of them and a panel holds the rest. The page has the room, so a deletion
+  is simply there, where it was, in the deleted-resource colour.
+- **Context is bounded and expandable.** Three lines either side of each region, and the holes
+  between them stand as a control saying how many lines it is holding. A change set can span
+  thousands of lines nobody intends to read, and sending every one of them to open the page is
+  a cost paid on every file for the sake of the few gaps anyone opens.
+- **No language features.** No IntelliSense, no go-to-definition, no hover from a language
+  server. That is the trade, and the reason the editor surface is not going anywhere: "open in
+  editor" sits on every file heading and on the region being worked on, and starts no review of
+  its own.
+
+The document the page draws is line-ending normalized, which the buffer review cannot be. A
+matched keystroke in an editor has to leave the file's own endings alone; a page writes code
+into text nodes, where a carriage return is a line break in its own right and one left in
+would draw a phantom blank line under every row of a CRLF file. Nothing is lost by dropping
+them, because endings are normalized before the diff runs: a bare CR is never part of a change
+and never something the reviewer owes. The page therefore counts a CRLF line one character
+shorter than the editor review does, which is only visible in the "typed *n*/*m*" reading and
+costs nothing — the two surfaces already keep their own positions.
+
+The page's colour language is the review's and deliberately no more than that: code still owed
+is dimmed and comes up to full strength as it is typed, lines the change removed are drawn in
+the deleted-resource colour, and nothing else is coloured. In particular there is no syntax
+highlighting, which is the first thing a page like this gets asked for. The lesson from the
+rejected diff-editor surface applies to it exactly — colour that is loud everywhere drowns out
+the one distinction the review runs on, which here is owed against covered. A highlighter is
+parked in [brainstorm.md](brainstorm.md); the per-line structure the page already renders is
+the way in if real use asks for one. Every colour comes from the theme, because a page
+carrying its own palette is a page that looks wrong in half the themes it opens in.
+
+The page runs under a strict content policy: nothing loads but the extension's own stylesheet
+and script, and the script runs only under the nonce minted for that load. Code goes into the
+document as text and never as markup, so a file's contents cannot become part of the page's
+structure. Files whose content must not be copied never reach it either — the payload is built
+from the queue, which is where they are already refused.
+
+Keys are the editor review's wherever the editor review has one. Tab fills a word, Alt+F a
+line, Alt+S skips the region, Alt+J brings the caret back into view, and Enter is a line break
+— or, on a deletion, the acknowledgement, since there is nothing there to type. Every other key
+scrolls the page.
+
 ### Retype matching rules
 
 Typing in a real buffer means the editor itself modifies text the user didn't type
@@ -639,7 +732,23 @@ tamper-evidence machinery, and keeps the extension out of surveillance territory
   interleaves timing concerns with matching. `src/removalMark.ts` owns the mark for removed
   lines, a module of its own because its geometry is the one part of the overlay that can be
   got wrong rather than merely look wrong, and it is worth testing on its own.
- 
+  `src/changeSetPanel.ts` hosts the change set page: the webview, the files the document is
+  built from, the baseline advance and the log record. The rules behind it are two core
+  modules — `src/core/changeSet.ts` turns a file's regions into the serializable document the
+  page draws, the one place where the offsets a review works in become the line numbers a
+  reader reads by, and `src/core/changeSetReview.ts` holds what each region owes and what a
+  gesture comes to, including which surface owns a file. Those are the parts that can be got
+  wrong rather than merely look wrong, and the panel is left thin enough to be read at a
+  glance.
+- `media/` — the change set page's own files: `changeset.html`, `changeset.css` and
+  `changeset.js`, plus the activity-bar icon. The page's script holds no review logic; every
+  gesture goes to the extension and the page redraws from the answer, so the matching rules
+  have exactly one implementation. The script is tested from `test/`, not from the extension
+  host: nothing can post a message into a webview or press a key inside one from there, so
+  `test/helpers/pageDom.ts` gives the shipped file the four globals a webview hands it and a
+  document of the shape its HTML provides. Structure and messages can be asserted that way;
+  colour, spacing and geometry stay eye-only, and the helper models none of them on purpose so
+  nothing can be claimed about them by accident.
 - `hook/` — standalone hook script installed into agent tooling (plain Node, no deps).
 - `test/` — unit tests (`npm test`, Node's built-in runner). The hook script is tested
   end-to-end by spawning it as a subprocess with realistic payloads; installing and

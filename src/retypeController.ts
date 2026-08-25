@@ -985,10 +985,17 @@ export class RetypeController implements vscode.Disposable {
     });
   }
 
-  async forget(file: string): Promise<void> {
+  /**
+   * Drop the review of a file because it is no longer this surface's to review:
+   * its debt was cleared some other way (marked reviewed from the view, or
+   * auto-skipped), or another surface took the file over. `message` says which,
+   * since the reviewer is owed a reason for a review ending under them.
+   */
+  async forget(file: string, message?: string): Promise<void> {
     if (this.session?.file === file) {
       await this.stop(
-        `review of ${path.basename(file)} ended — it was marked reviewed without typing.`
+        message ??
+          `review of ${path.basename(file)} ended — it was marked reviewed without typing.`
       );
     }
   }
