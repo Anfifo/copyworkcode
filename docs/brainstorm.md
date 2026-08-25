@@ -67,20 +67,6 @@ status ("filled") distinct from typed and skipped.
   typed); the region-sized fill and a distinct "filled" status stay parked until real use
   shows where the line between fair and too-easy sits.
 
-### Explicit review/edit mode toggle
-
-The fallback if the implicit divergence budget reads badly in real use: a key (Alt+E, say)
-that switches a section between "guide me" and "let me write", instead of inferring it from
-a run of unmatched characters.
-
-- **Upside:** nothing is ever inferred, so the flow can never guess wrong about intent.
-- **Downside:** demands a decision before you know whether you disagree with the code —
-  and by the time you do know, you are already typing, which is exactly the moment the
-  implicit version handles for free. Also one more mode to explain.
-- **Status:** parked as the named fallback (2026-08-19). Implicit divergence shipped
-  first; if dogfooding shows the hand-over is confusing or fires when unwanted, this is
-  the replacement, not a patch to the budget.
-
 ### Aggregate review worksheet
 
 One synthetic buffer holding every changed region across every file in the queue, reviewed
@@ -109,12 +95,12 @@ Attaching "reviewed by typing" evidence to PRs for reviewers or employers.
 
 Sections as a strict sequence, with the flow always pointing at "the next one".
 
-- **Why rejected:** it only worked because the editor was locked. With the cursor free, a
-  flow that insists on the next section spends its time fighting the user for it. Sections
-  became a set with per-section progress, keeping the ordered walk as the default motion
-  and dropping it as a rule (2026-08-19, see design.md). Parking went with it: per-section
-  progress *is* the state, and the byte-identical resume check it depended on would almost
-  never pass once reviewing a file changes it.
+- **Why rejected:** it only worked while the review owned the caret, and it doesn't —
+  clicking anywhere is free even with the buffer read-only, and a flow that insists on the
+  next section spends its time fighting the user for it. Sections became a set with
+  per-section progress, keeping the ordered walk as the default motion and dropping it as a
+  rule (2026-08-19, see design.md). Parking went with it: per-section progress *is* the
+  state, and the byte-identical resume check it depended on answers the wrong question.
 
 ### Inverting the ambient highlight
 

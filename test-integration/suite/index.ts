@@ -4,14 +4,14 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 
 /**
- * End-to-end checks inside a live extension host. The review runs in a normal
- * editable editor, so most of what is worth checking is what happens when the
- * buffer changes underneath it: diverging from the target one character at a
- * time, diverging far enough that the section is handed over, erasing with
- * backspace, something else writing to the file mid-review, and the buffer being
- * replaced outright. Alongside those, the plain flow — typing, fills, skips,
- * deletion confirms, free roam across sections, the read-only lock option, and
- * the git comparison mode.
+ * End-to-end checks inside a live extension host. A review is armed by default,
+ * so half of what is worth checking is the line between what guidance allows and
+ * what it doesn't: a wrong key, a raw edit command and a backspace all bounce off
+ * an armed editor, and all three land once editing is enabled. The other half is
+ * what happens when the buffer changes anyway — the reviewer's own writing,
+ * something else writing to the file mid-review, the buffer being replaced
+ * outright. Alongside those, the plain flow: typing, fills, skips, deletion
+ * confirms, free roam across sections, and the git comparison mode.
  *
  * Runs sequentially — one review is live at a time by design.
  */
@@ -71,6 +71,18 @@ export async function run(): Promise<void> {
     editor.selection = new vscode.Selection(at, at);
     await settle(150);
   };
+  /** What a hover over the start of a line says, as one string. */
+  const hoverAt = async (document: vscode.TextDocument, line: number) =>
+    (
+      (await exec(
+        'vscode.executeHoverProvider',
+        document.uri,
+        new vscode.Position(line, 0)
+      )) as vscode.Hover[]
+    )
+      .flatMap((hover) => hover.contents)
+      .map((part) => (part as vscode.MarkdownString).value ?? '')
+      .join('\n');
   /** Claim whatever is left of a review, however many sections that is. */
   const claimRest = async () => {
     for (let i = 0; i < 5; i++) {
@@ -159,17 +171,30 @@ export async function run(): Promise<void> {
   assert.equal(baselineOf('tabbed.ts'), 'f\n\tx = y;\n');
   assert.equal(reviews()[4].outcome, 'typed', 'a part-typed section counts as typed');
 
-  // --- A raw edit lands in the file and the review absorbs it ---------------
-  // The old read-only review made any such gesture inert. Now it is a real
-  // edit: the section grows around it and the walk carries on from there.
+  // --- A raw edit bounces off an armed review, and lands once asked for -----
+  // Armed, the editor carries the session read-only flag, so a gesture that
+  // isn't a matched keystroke does nothing at all. Enabling editing makes the
+  // same gesture a real edit: the section grows around it, and typing carries on
+  // from there when guidance comes back.
   const entered = await review('entered.ts');
   await exec('default:type', { text: '!' });
   await settle();
   assert.equal(
     entered.getText(),
-    'start\n!a\nb\n',
-    'an edit off the matching path reaches the buffer'
+    'start\na\nb\n',
+    'an edit off the matching path is inert while guidance is armed'
   );
+  await exec('copyworkcode.enableEditing');
+  await settle(150);
+  await exec('default:type', { text: '!' });
+  await settle();
+  assert.equal(
+    entered.getText(),
+    'start\n!a\nb\n',
+    'with editing enabled the same gesture reaches the buffer'
+  );
+  await exec('copyworkcode.resumeTyping');
+  await settle(150);
   await type('a');
   await exec('copyworkcode.typeEnter');
   await type('b');
@@ -180,6 +205,11 @@ export async function run(): Promise<void> {
     'the baseline records the reviewed content, including the edit'
   );
   assert.equal(reviews().length, 6, 'the review survived the raw edit');
+  assert.equal(
+    reviews()[5].hunksEdited,
+    1,
+    'a section the reviewer wrote in is recorded as edited, not typed'
+  );
 
   // --- A reload from disk does not end the review ---------------------------
   const reload = await review('reload.ts');
@@ -202,7 +232,14 @@ export async function run(): Promise<void> {
   // A single change covering the document says nothing about where the old text
   // went, so remapping it would collapse every section onto one range. The
   // review restarts from the new content instead — and stays typeable.
+  //
+  // Driven with editing enabled, because an armed review refuses a programmatic
+  // edit as flatly as it refuses a paste: the read-only flag is not a UI hint,
+  // and this is the reviewer selecting everything and writing over it. A file
+  // replaced on *disk* does reach an armed review — that path is `reload.ts`.
   const replaced = await review('replaced.ts');
+  await exec('copyworkcode.enableEditing');
+  await settle(150);
   const whole = new vscode.Range(
     replaced.positionAt(0),
     replaced.positionAt(replaced.getText().length)
@@ -210,7 +247,7 @@ export async function run(): Promise<void> {
   await editorOf('replaced.ts').edit((edit) => edit.replace(whole, 'brand\nnew\n'));
   await settle();
   assert.equal(replaced.getText(), 'brand\nnew\n');
-  await exec('copyworkcode.jumpToReview');
+  await exec('copyworkcode.resumeTyping');
   await settle(150);
   await typeAll('brandnew');
   await settle();
@@ -271,27 +308,26 @@ export async function run(): Promise<void> {
   assert.equal(baselineOf('word.ts'), 'w1\nconst sum = add(a, b);\n');
   assert.equal(reviews().length, 11, 'the word-filled review is recorded');
 
-  // --- Diverging: a wrong character is a real edit, and ten in a row hand
-  // --- the section over -----------------------------------------------------
-  const diverge = await review('diverge.ts');
-  assert.equal(diverge.getText(), 'd1\nORIGINAL\n');
+  // --- A wrong key changes nothing, however many times it is pressed -------
+  const wrongKey = await review('wrongkey.ts');
+  assert.equal(wrongKey.getText(), 'd1\nORIGINAL\n');
 
   await type('x');
   await settle(150);
   assert.equal(
-    diverge.getText(),
-    'd1\nxORIGINAL\n',
-    'a keystroke that does not match the target is still typed into the file'
+    wrongKey.getText(),
+    'd1\nORIGINAL\n',
+    'a keystroke that does not match the target inserts nothing'
   );
 
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 9; i++) {
     await type('x');
     await settle(80);
   }
   assert.equal(
-    diverge.getText(),
-    'd1\nxxxxxORIGINAL\n',
-    'five of the reviewer’s own characters, all still matched against'
+    wrongKey.getText(),
+    'd1\nORIGINAL\n',
+    'ten wrong keys are ten wrong keys — the file cannot drift into them'
   );
   await exec('copyworkcode.finishReview');
   await settle();
@@ -301,53 +337,64 @@ export async function run(): Promise<void> {
     'finishing is refused while a section is still owed'
   );
 
-  for (let i = 0; i < 5; i++) {
-    await type('x');
-    await settle(80);
-  }
-  assert.equal(
-    diverge.getText(),
-    'd1\nxxxxxxxxxxORIGINAL\n',
-    'the tenth divergent character is typed like the rest'
-  );
-  assert.equal(
-    reviews().length,
-    11,
-    'a section handed over does not finish the review by itself'
-  );
-
-  // Guidance is off for this section now: nothing is being matched, so this
-  // keystroke is a plain insertion with no mismatch feedback behind it.
-  await type('y');
+  // The same keystroke, once the reviewer has asked for the editor. The section
+  // keeps its place, so guidance picks the rest up where it left off.
+  await exec('copyworkcode.enableEditing');
   await settle(150);
-  const divergeText = diverge.getText();
-  assert.ok(
-    divergeText.includes('y'),
-    'typing in a handed-over section goes straight into the buffer'
-  );
-  assert.ok(divergeText.includes('xxxxxxxxxx'), 'the reviewer’s own run is intact');
-  assert.ok(divergeText.includes('ORIGINAL'), 'the target text is still there');
-
-  await exec('copyworkcode.finishReview');
-  await settle();
-  assert.equal(reviews().length, 12, 'the handed-over review finishes on request');
-  assert.equal(reviews()[11].hunksEdited, 1, 'recorded as a section written by hand');
+  await type('x');
+  await settle(150);
   assert.equal(
-    baselineOf('diverge.ts'),
-    onDisk('diverge.ts'),
+    wrongKey.getText(),
+    'd1\nxORIGINAL\n',
+    'with editing enabled the keystroke goes into the file'
+  );
+  await exec('copyworkcode.resumeTyping');
+  await settle(150);
+  await typeAll('ORIGINAL');
+  await settle();
+  assert.equal(
+    wrongKey.getText(),
+    'd1\nxORIGINAL\n',
+    'the rest of the section was typed out, not inserted a second time'
+  );
+  assert.equal(reviews().length, 12, 'typing the rest of it finishes the review');
+  assert.equal(reviews()[11].hunksEdited, 1, 'recorded as a section written in');
+  assert.equal(
+    baselineOf('wrongkey.ts'),
+    onDisk('wrongkey.ts'),
     'the baseline records the reviewer’s version of the file'
   );
 
-  // --- Backspace works, and gives back exactly what it erased ---------------
+  // --- Backspace: inert while armed, an ordinary erase once enabled ---------
   const backspace = await review('backspace.ts');
   await typeAll('be');
   await exec('deleteLeft');
   await settle();
   assert.equal(
     backspace.getText(),
-    'b1\nbta\n',
-    'backspace erases a real character — with no keybinding of ours involved'
+    'b1\nbeta\n',
+    'backspace cannot take the target apart while guidance is armed'
   );
+  await exec('copyworkcode.enableEditing');
+  await settle(150);
+  await exec('deleteLeft');
+  await settle();
+  assert.equal(
+    backspace.getText(),
+    'b1\nbta\n',
+    'with editing enabled it erases a real character — no keybinding of ours'
+  );
+  await exec('copyworkcode.resumeTyping');
+  await settle(400);
+  // Going back to typing writes what was written by hand. An armed review can
+  // neither dirty the buffer nor save it, so the erase would otherwise sit in a
+  // buffer the reviewer cannot write until the review ends.
+  assert.equal(
+    backspace.isDirty,
+    false,
+    'resuming typing saved what was written by hand'
+  );
+  assert.equal(onDisk('backspace.ts'), 'b1\nbta\n', 'and it reached the file');
   await typeAll('ta');
   await settle();
   assert.equal(
@@ -356,12 +403,21 @@ export async function run(): Promise<void> {
     'the section stayed coherent across the erase and completed'
   );
   assert.equal(reviews()[12].outcome, 'typed');
+  assert.equal(
+    reviews()[12].hunksEdited,
+    1,
+    'erasing part of the target counts as writing it yourself'
+  );
 
   // --- Something else writing to the file mid-review -----------------------
   // The old flow killed the review on any change it had not made itself. Now
   // the sections are re-anchored and the walk carries on, however many changes
-  // arrive and wherever they land.
+  // arrive and wherever they land. Editing is enabled for the same reason as
+  // the block above: an armed editor refuses writes from anywhere, including
+  // another extension's.
   const foreign = await review('foreign.ts');
+  await exec('copyworkcode.enableEditing');
+  await settle(150);
   const foreignEdit = new vscode.WorkspaceEdit();
   foreignEdit.insert(foreign.uri, new vscode.Position(0, 0), 'inserted\n');
   foreignEdit.insert(
@@ -379,6 +435,8 @@ export async function run(): Promise<void> {
     await vscode.workspace.applyEdit(burst);
   }
   await settle();
+  await exec('copyworkcode.resumeTyping');
+  await settle(150);
   await exec('copyworkcode.jumpToReview');
   await settle(150);
   await typeAll('alpha');
@@ -435,32 +493,14 @@ export async function run(): Promise<void> {
   assert.equal(baselineOf('roam.ts'), 'r1\none\nr3\ntwo\nr5\n');
   assert.equal(reviews()[15].hunksTyped, 2, 'both sections claimed, in either order');
 
-  // --- The read-only lock option restores the strict behaviour -------------
+  // --- The read-only flag lifts when the review ends -----------------------
   const config = () => vscode.workspace.getConfiguration('copyworkcode');
-  await config().update('lockDuringReview', true, true);
-  await settle();
   const locked = await review('locked.ts');
-  await type('x');
-  await settle(150);
-  assert.equal(
-    locked.getText(),
-    'l1\nlocked\n',
-    'with the lock on, a mismatched keystroke inserts nothing'
-  );
-  await exec('default:type', { text: '!' });
-  await settle(150);
-  assert.equal(
-    locked.getText(),
-    'l1\nlocked\n',
-    'with the lock on, an edit off the matching path is inert too'
-  );
   await typeAll('locked');
   await settle();
   assert.equal(baselineOf('locked.ts'), 'l1\nlocked\n');
   assert.equal(reviews()[16].outcome, 'typed');
-  await config().update('lockDuringReview', undefined, true);
-  await settle();
-  // The lock has to lift when the review ends, or the file stays unwritable for
+  // The flag has to lift when the review ends, or the file stays unwritable for
   // the rest of the session.
   await vscode.window.showTextDocument(locked);
   await settle();
@@ -496,9 +536,9 @@ export async function run(): Promise<void> {
   // drives the reject animation across one of those rebuilds.
   const animated = await review('animated.ts');
   await type('a');
-  await type('q'); // a real edit now, and the one that flashes
+  await type('q'); // the wrong key, and the one that flashes
   await settle(150);
-  assert.equal(animated.getText(), 'an1\naqn2\n');
+  assert.equal(animated.getText(), 'an1\nan2\n');
   await config().update('animations', 'subtle', true);
   await settle();
   await type('n');
@@ -508,12 +548,12 @@ export async function run(): Promise<void> {
   await settle();
   assert.equal(
     animated.getText(),
-    'an1\naqn2\n',
+    'an1\nan2\n',
     'animation frames never edit the buffer'
   );
   assert.equal(
     baselineOf('animated.ts'),
-    'an1\naqn2\n',
+    'an1\nan2\n',
     'the review completed across two animation level changes'
   );
   assert.equal(reviews().length, 19, 'the review survived the level changes');
@@ -523,9 +563,10 @@ export async function run(): Promise<void> {
 
   // --- Keystrokes arriving faster than they can be answered ----------------
   // Fired without awaiting each one, which pins down what a burst has to
-  // produce: matched keystrokes still edit nothing, and divergent ones land in
-  // the order they were typed, each at its own offset. Commands driven from the
-  // extension turn out to arrive sequentially, so this does not prove the
+  // produce: it edits nothing, and it is answered in the order it arrived —
+  // typing the rest of the section afterwards only completes it if all five
+  // keystrokes advanced the position, one after another. Commands driven from
+  // the extension turn out to arrive sequentially, so this does not prove the
   // gesture queue is load-bearing — it fixes the behaviour a burst must have,
   // however the keystrokes get here.
   const fast = await review('fast.ts');
@@ -534,18 +575,70 @@ export async function run(): Promise<void> {
   assert.equal(
     fast.getText(),
     'q1\nquick brown\n',
-    'a burst of matched keystrokes still edits nothing'
+    'a burst of matched keystrokes edits nothing'
   );
   await Promise.all([...'ABC'].map((key) => type(key)));
   await settle();
   assert.equal(
     fast.getText(),
-    'q1\nquickABC brown\n',
-    'a burst of divergent keystrokes lands in order, each at the right offset'
+    'q1\nquick brown\n',
+    'a burst of wrong keys leaves the buffer alone too'
   );
-  await exec('copyworkcode.skipSection');
+  await typeAll('brown');
   await settle();
+  assert.equal(
+    baselineOf('fast.ts'),
+    'q1\nquick brown\n',
+    'the burst was answered in order, so the rest of it could be typed out'
+  );
   assert.equal(reviews().length, 20, 'the fast-typed review is recorded');
+  assert.equal(reviews()[19].hunksTyped, 1, 'and counts as typed, not written in');
+
+  // --- A review that opens with editing already enabled --------------------
+  // The setting changes which state a review starts in and nothing else: the
+  // first keystroke is an edit rather than a match, and the section still has to
+  // be claimed before the review can finish.
+  await config().update('startEditing', true, true);
+  await settle();
+  const editFirst = await review('startedit.ts');
+  await exec('default:type', { text: '!' });
+  await settle(150);
+  assert.equal(
+    editFirst.getText(),
+    'e1\n!edited\n',
+    'with the setting on, the first keystroke edits the file'
+  );
+  await config().update('startEditing', undefined, true);
+  await settle();
+  await exec('copyworkcode.resumeTyping');
+  await settle(300);
+  await typeAll('edited');
+  await settle();
+  assert.equal(
+    editFirst.getText(),
+    'e1\n!edited\n',
+    'and guidance took the rest of the section from there'
+  );
+  assert.equal(reviews().length, 21, 'the review that opened editable is recorded');
+  assert.equal(reviews()[20].hunksEdited, 1, 'recorded as a section written in');
+
+  // --- Clicking back into text already typed --------------------------------
+  // A click anywhere in a section is someone pointing at the section, not at an
+  // offset. The caret goes to where the typing goes, and the next key lands.
+  const retouch = await review('retouch.ts');
+  await typeAll('abc');
+  const caretIn = () => retouch.offsetAt(editorOf('retouch.ts').selection.active);
+  assert.equal(caretIn(), 6, 'three characters typed, caret three characters in');
+  await clickAt('retouch.ts', 4);
+  assert.equal(caretIn(), 6, 'a click behind the typing position is sent back to it');
+  await type('d');
+  assert.equal(caretIn(), 7, 'and the next key is matched as if nothing had moved');
+  assert.equal(retouch.getText(), 't1\nabcdef\n');
+  await exec('copyworkcode.abortReview');
+  await settle();
+
+  await exec('copyworkcode.abortReview');
+  await settle();
 
   // Typing must be back to normal once no review is active. Typed into a file
   // that was never a review editor, so this cannot pass or fail on whatever

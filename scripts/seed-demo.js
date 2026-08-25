@@ -7,9 +7,9 @@
 // it in an extension development host and the review tree is already
 // populated, no agent session needed.
 //
-// Every file here is also a place to try the edit side of a review: type
-// something other than the target and it lands in the file, and ten characters
-// of your own in a row hand that section over.
+// Every file here is also a place to try both sides of a review: typing the
+// change out to watch wrong keys bounce off, and pressing Ctrl+E to write a
+// different version instead.
 //
 // Run directly with `npm run demo:seed`, or use the "Run Extension (Demo)"
 // launch configuration, which seeds and opens it in one go. Re-running the

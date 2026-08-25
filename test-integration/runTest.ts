@@ -7,9 +7,9 @@ import { runTests } from '@vscode/test-electron';
 /**
  * Boots a real editor instance against a fixture workspace that already has
  * baselines and pending debt, then runs the suite in the extension host. One
- * file per interesting review case, including the ones that only exist because
- * the review happens in an editable buffer: diverging from the target, erasing,
- * and something else writing to the file mid-review.
+ * file per interesting review case, including the ones about the line between
+ * an armed review and an editable one: pressing the wrong key, hand-writing
+ * code, erasing, and something else writing to the file mid-review.
  */
 async function main(): Promise<void> {
   // Inherited from editor-integrated terminals; it makes the spawned test
@@ -41,7 +41,8 @@ async function main(): Promise<void> {
   // Indented section part-filled with the tab key and part typed.
   fs.writeFileSync(path.join(fixture, 'tabbed.ts'), 'f\n\tx = y;\n');
   fs.writeFileSync(path.join(baselines, 'tabbed.ts'), 'f\n');
-  // Multi-line section typed with the enter key between lines.
+  // A raw edit command, refused while armed and applied once editing is on,
+  // then the rest typed with the enter key between lines.
   fs.writeFileSync(path.join(fixture, 'entered.ts'), 'start\na\nb\n');
   fs.writeFileSync(path.join(baselines, 'entered.ts'), 'start\n');
   // File reloaded from disk mid-review.
@@ -50,10 +51,10 @@ async function main(): Promise<void> {
   // Buffer replaced wholesale mid-review: the sections are re-derived.
   fs.writeFileSync(path.join(fixture, 'replaced.ts'), 'p1\np2\n');
   fs.writeFileSync(path.join(baselines, 'replaced.ts'), 'p1\n');
-  // Ten unmatched characters in a row: the section is handed over.
-  fs.writeFileSync(path.join(fixture, 'diverge.ts'), 'd1\nORIGINAL\n');
-  fs.writeFileSync(path.join(baselines, 'diverge.ts'), 'd1\n');
-  // Typed, erased with backspace, then typed to the end.
+  // Wrong keys that must not reach the file, then one that is asked for.
+  fs.writeFileSync(path.join(fixture, 'wrongkey.ts'), 'd1\nORIGINAL\n');
+  fs.writeFileSync(path.join(baselines, 'wrongkey.ts'), 'd1\n');
+  // Typed, erased with backspace once editing is on, then typed to the end.
   fs.writeFileSync(path.join(fixture, 'backspace.ts'), 'b1\nbeta\n');
   fs.writeFileSync(path.join(baselines, 'backspace.ts'), 'b1\n');
   // Written to from outside the review flow while the review is live.
@@ -72,7 +73,7 @@ async function main(): Promise<void> {
   // one, which is how the editor really dispatches them.
   fs.writeFileSync(path.join(fixture, 'fast.ts'), 'q1\nquick brown\n');
   fs.writeFileSync(path.join(baselines, 'fast.ts'), 'q1\n');
-  // Reviewed with the read-only lock option turned on.
+  // Reviewed start to finish, to check the read-only flag lifts afterwards.
   fs.writeFileSync(path.join(fixture, 'locked.ts'), 'l1\nlocked\n');
   fs.writeFileSync(path.join(baselines, 'locked.ts'), 'l1\n');
   // Review abandoned by closing the review editor.
@@ -84,6 +85,10 @@ async function main(): Promise<void> {
   // Deletion-only change: nothing to retype, acknowledged with one action.
   fs.writeFileSync(path.join(fixture, 'removed.ts'), 'keep\n');
   fs.writeFileSync(path.join(baselines, 'removed.ts'), 'keep\ngone\n');
+  // Clicked back into text already typed, which is a click into the section
+  // like any other: the caret goes to where the typing goes.
+  fs.writeFileSync(path.join(fixture, 'retouch.ts'), 't1\nabcdef\n');
+  fs.writeFileSync(path.join(baselines, 'retouch.ts'), 't1\n');
   // Reviewed with the fill-next-word control only.
   fs.writeFileSync(path.join(fixture, 'word.ts'), 'w1\nconst sum = add(a, b);\n');
   fs.writeFileSync(path.join(baselines, 'word.ts'), 'w1\n');
@@ -93,6 +98,9 @@ async function main(): Promise<void> {
   // The other file, started (and dropped) while the one above waits.
   fs.writeFileSync(path.join(fixture, 'other.ts'), 'ob1\nob2\n');
   fs.writeFileSync(path.join(baselines, 'other.ts'), 'ob1\n');
+  // Reviewed with `startEditing` on: editable from the first keystroke.
+  fs.writeFileSync(path.join(fixture, 'startedit.ts'), 'e1\nedited\n');
+  fs.writeFileSync(path.join(baselines, 'startedit.ts'), 'e1\n');
   // Retyped while the animation level is changed underneath the live review.
   fs.writeFileSync(path.join(fixture, 'animated.ts'), 'an1\nan2\n');
   fs.writeFileSync(path.join(baselines, 'animated.ts'), 'an1\n');
@@ -114,9 +122,9 @@ async function main(): Promise<void> {
   const state = JSON.parse(
     fs.readFileSync(path.join(fixture, '.copyworkcode', 'state.json'), 'utf8')
   );
-  if (state.reviews.length !== 20) {
+  if (state.reviews.length !== 21) {
     throw new Error(
-      `expected 20 review records in the fixture, found ${state.reviews.length}`
+      `expected 21 review records in the fixture, found ${state.reviews.length}`
     );
   }
   const advanced = fs.readFileSync(path.join(baselines, 'sample.ts'), 'utf8');

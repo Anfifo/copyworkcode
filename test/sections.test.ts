@@ -147,15 +147,15 @@ test('a change after a section leaves it alone', () => {
   );
 });
 
-test('a divergent character typed at the position is covered by it', () => {
+test('a character the reviewer writes at the position is covered by it', () => {
   const before = 'aaa\nTARGET\n';
   const sections = buildSections('aaa\n', before);
   sections[0].position = 3; // "TAR" claimed
 
-  // The reviewer types "x" where the target wanted "G": the flow passes the
-  // keystroke through to the buffer, the section grows to cover it, and the
+  // With editing enabled the reviewer writes "x" where the target wanted "G":
+  // the character lands in the buffer, the section grows to cover it, and the
   // position steps over it — remapping alone has to do that, or the character
-  // they just typed would stay marked as text they still owe.
+  // they just wrote would stay marked as text they still owe.
   remap(sections, before, [insert(sections[0].start + 3, 'x')]);
 
   assert.equal(sections[0].target, 'TARxGET\n');

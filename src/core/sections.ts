@@ -8,10 +8,10 @@
  * position and its own outcome, and the review is done when every section is
  * claimed, in whatever order the reviewer got to them.
  *
- * Because the review now happens in a normal editable buffer, offsets cannot
- * be assumed stable: the reviewer's own divergent typing, a formatter, an
- * agent writing the file again, an undo — all of them move text under the
- * section set. `remapSections` is the one place that reconciles them.
+ * Because the review happens in a real buffer, offsets cannot be assumed
+ * stable: the reviewer's own editing, a formatter, an agent writing the file
+ * again, an undo — all of them move text under the section set.
+ * `remapSections` is the one place that reconciles them.
  */
 
 import { diffLines } from './diff';
@@ -24,8 +24,8 @@ export type SectionKind = 'type' | 'confirm';
  * - `typed` — reproduced by hand, at least in part.
  * - `skipped` — filled in without typing it.
  * - `confirmed` — a deletion-only section, acknowledged.
- * - `edited` — the reviewer wrote their own text here instead, or the section
- *   was edited away entirely. Guidance steps aside for it.
+ * - `edited` — the reviewer wrote their own text here, or the section was
+ *   edited away entirely.
  */
 export type SectionOutcome = 'typed' | 'skipped' | 'confirmed' | 'edited';
 
@@ -47,10 +47,12 @@ export interface Section {
   /** True once any keystroke was matched here — what separates typed from
    * skipped when the section closes. */
   touched: boolean;
-  /** Consecutive keystrokes that did not match. Reset by any match. */
-  diverged: number;
-  /** True once divergence went past the budget: this section is the
-   * reviewer's to write, and matching stops for it. */
+  /** True once the reviewer changed this section's text themselves, with
+   * editing enabled. Only a record: the section still owes whatever it owes,
+   * and the flag decides how it is reported when it closes. */
+  handEdited: boolean;
+  /** True once there is nothing left to match here: the section's text was
+   * edited away entirely, so guidance has nothing to guide. */
   free: boolean;
   outcome?: SectionOutcome;
 }
@@ -175,12 +177,12 @@ function shift(section: Section, change: TextChange): void {
   // not the ones that were read and reproduced any more.
   //
   // Otherwise the position rides along, and text inserted *at* it counts as
-  // covered. That tie is what makes a reviewer's own divergent character behave:
-  // the flow passes the keystroke through to the buffer, and remapping alone
-  // steps the position over it, with no second pass to get the ordering of the
-  // insertion and the change event wrong. The cost is that a formatter inserting
-  // at exactly the cursor is taken as covered too — the one offset where that is
-  // a fair guess, since it is where the reviewer is typing.
+  // covered. That tie is what makes the reviewer's own writing behave: with
+  // editing enabled they write at the typing position, and remapping alone
+  // steps the position over what they added, so guidance does not turn around
+  // and ask them to type their own text back. The cost is that a formatter
+  // inserting at exactly the cursor is taken as covered too — the one offset
+  // where that is a fair guess, since it is where the reviewer is typing.
   const claimed =
     change.to > start && change.from < typed
       ? Math.max(change.from, section.start)
@@ -283,7 +285,7 @@ export function nextUnclaimed(
 function blank(
   base: Pick<Section, 'kind' | 'start' | 'end' | 'target' | 'removedLines'>
 ): Section {
-  return { ...base, position: 0, touched: false, diverged: 0, free: false };
+  return { ...base, position: 0, touched: false, handEdited: false, free: false };
 }
 
 function clamp(value: number, low: number, high: number): number {

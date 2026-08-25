@@ -6,11 +6,11 @@ A VSCode extension that turns AI-generated code changes into something you activ
 review — by typing them yourself.
 
 When an AI assistant edits your code, the change doesn't just land silently. Instead,
-copyworkcode presents it and asks you to write it out, change by change. It happens in a
-normal editor, not a locked one: if you disagree with what the AI wrote, type what you
-wanted instead and it lands in the file. You can skip any change with a click, and
-configure rules to auto-skip files you don't care to review (lockfiles, generated code,
-formatting-only edits).
+copyworkcode presents it and asks you to write it out, change by change. While you type, the
+file follows the code to the letter — a wrong key changes nothing — and if you disagree with
+what the AI wrote, one keystroke hands you the editor to write your own version instead. You
+can skip any change with a click, and configure rules to auto-skip files you don't care to
+review (lockfiles, generated code, formatting-only edits).
 
 ## Why
 
@@ -38,13 +38,13 @@ Early development, but the core loop works end to end:
   dimmed, the section you're on is highlighted, and the diff against the baseline stays one
   keystroke away. Keystrokes that match the code insert nothing — they just undim it — so
   typing a change out exactly leaves the file byte-identical.
-- **Disagree by typing.** The editor stays a real editor. Anything that doesn't match the
-  code is an ordinary edit and lands in the file as you type it; backspace, paste and undo
-  all work. Ten characters of your own in a row and the tool concludes you meant to rewrite
-  this bit: it stops matching that section, records it as yours rather than the AI's, and
-  picks guidance back up on the next one. There's no mode to switch, and erasing never
-  counts against you. If you'd rather it be strict, one setting makes the file read-only
-  for the review instead.
+- **Disagree in one keystroke.** While you're typing a change the file is read-only, so a
+  key that doesn't match inserts nothing and neither does a stray paste or backspace — a
+  mistyped character can't quietly rewrite the code you're reading. Press Ctrl+E and it's an
+  ordinary editor again: write, erase, paste and reformat, with completions and auto-close
+  back. Press it again and typing picks up exactly where you left off. Anything you changed
+  by hand is recorded as yours rather than the AI's — and one setting opens every review that
+  way round, if writing is mostly what you do.
 - **Walk it in any order.** Sections aren't a queue — click into any of them and start
   typing. Finishing one still moves you to the next, so you can also just keep typing and
   be led through the file.

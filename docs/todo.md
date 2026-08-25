@@ -9,10 +9,12 @@ promoted here when they're deemed worth building.
 - [ ] **Dogfood the core loop on real work** — the retype flow is built and tested, but
       the product hypothesis (retyping feels like review, not punishment) is only
       testable by living with it. Expect matching-rule and pacing tweaks to fall out.
-      Two things to watch specifically, both of which have a fallback recorded in
-      brainstorm.md if they read badly in practice: whether the divergence budget's
-      hand-over is legible when it happens without being asked for, and whether losing the
-      ordered walk costs anything real now that coverage is the only guarantee.
+      Two things to watch specifically. Whether losing the ordered walk costs anything real
+      now that coverage is the only guarantee — the fallback for that one is recorded in
+      brainstorm.md. And whether an armed review's read-only editor reads as protection or
+      as an obstruction: the wrong-key case it exists for is fixed, but every other way of
+      touching the file now goes through Ctrl+E first, and only use will say whether that
+      is one keystroke too many.
 - [ ] **Per-project override for content exclusion** — the exclusion patterns are fixed;
       a project keeping secrets under a name the list doesn't cover has no way to add it,
       and no way to reclaim a source file the list catches by mistake.

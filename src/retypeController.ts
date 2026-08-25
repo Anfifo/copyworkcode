@@ -4,6 +4,8 @@ import { advanceBaseline } from './core/baselineStore';
 import { RetypeEngine } from './core/retype';
 import {
   Section,
+  SectionOutcome,
+  TextChange,
   buildSections,
   claimedCount,
   enclosingSection,
@@ -38,12 +40,21 @@ interface Session {
   root: string;
   file: string;
   document: vscode.TextDocument;
+  /** What the buffer held when the review opened — the version being reviewed,
+   * before the reviewer wrote a word of their own. Kept so a reset can put the
+   * file back to it, and re-read whenever the review restarts from new
+   * content, since that content is what is under review from then on. */
+  original: string;
   sections: Section[];
   /** The section the review is pointing at. Follows the cursor, but is kept
    * across a move to another editor so the highlight doesn't blink away. */
   active?: Section;
-  /** True while this review holds the session read-only flag (the opt-in lock). */
+  /** True while this review holds the editor's session read-only flag, which
+   * is every moment guidance is armed. */
   locked: boolean;
+  /** True while the reviewer has editing enabled: guidance stands down, the
+   * read-only flag is lifted, and the file is an ordinary editor. */
+  editing: boolean;
 }
 
 /** Where the cursor is in relation to the review, resolved per keystroke. */
@@ -51,8 +62,10 @@ interface Focus {
   editor: vscode.TextEditor;
   cursor: number;
   section: Section;
-  /** The cursor is exactly where this section's next matched character goes —
-   * the only situation in which keystrokes are checked against the target. */
+  /** The cursor is in a section that still owes something and guidance is
+   * armed — the only situation in which keystrokes are checked against the
+   * target. Anywhere in the section counts: the keystroke lands at the typing
+   * position wherever the caret is, and the caret is taken there. */
   guided: boolean;
 }
 
@@ -63,21 +76,29 @@ export interface ReviewProgress {
 }
 
 /**
- * Drives the guided retype for one file. The review opens the file in a
- * normal, fully editable editor — not a diff, not a locked buffer — so the
- * review flow owns the visuals while the editor stays an editor: text still
- * owed is dimmed, the section being worked on carries a highlight and a lens
- * strip with its controls, and the exact next character to type is marked.
- * The baseline diff stays one action away instead of being the surface.
+ * Drives the guided retype for one file. The review opens the file in a plain
+ * editor — not a diff — so the review flow owns the visuals while the editor
+ * stays an editor: text still owed is dimmed, the section being worked on
+ * carries a highlight and a lens strip with its controls, and the exact next
+ * character to type is marked. The baseline diff stays one action away instead
+ * of being the surface.
  *
  * The buffer already holds the final content, so a *matched* keystroke inserts
  * nothing and only advances that section's position, letting the dimmed
- * rendering recede as the reviewer types. Anything that doesn't match is a real
- * edit and is passed straight through to the editor: the reviewer can rewrite,
- * erase, paste and reformat as they go, and it lands in the file immediately.
- * After a run of consecutive unmatched characters (`freeEditAfter`) the flow
- * concludes they meant to write their own code here, stops matching for that
- * section and records it as edited — guidance re-arms on the next one.
+ * rendering recede as the reviewer types. While guidance is armed the change is
+ * reproduced to the letter: a keystroke that doesn't match inserts nothing
+ * either, and the editor carries the session read-only flag, so no gesture at
+ * all — a paste, a backspace, an undo, a drag — can put text into the file that
+ * the reviewer didn't type from the target. A wrong key is a flash and nothing
+ * more.
+ *
+ * Writing their own code is a thing they ask for, not a thing that happens to
+ * them: `enableEditing` lifts the read-only flag and stands guidance down, and
+ * the file is an ordinary editor again with every convenience back — auto-close,
+ * completions, Tab, Enter. `resumeTyping`, on the same key, arms it again and
+ * puts the caret back where the section left off so the rest can be typed out.
+ * A section whose text they changed while editing is recorded as edited rather
+ * than typed. Both directions are one keystroke and neither loses any progress.
  *
  * Sections are a set, not a sequence: each carries its own position, and the
  * active one is whichever contains the cursor. Finishing one still walks the
@@ -92,12 +113,10 @@ export interface ReviewProgress {
  * a reload from disk) re-derives the sections from scratch.
  *
  * Keystrokes are intercepted with a `type` command override, which is what
- * keeps completions, snippets and auto-closing pairs from inserting text on the
- * reviewer's behalf *while a character is being matched*; once a section goes
- * free, input takes the editor's normal path and every convenience comes back.
- * `lockDuringReview` restores the old behaviour for anyone who wants it: the
- * review editor is marked read-only for the session, so nothing but a matched
- * keystroke can reach the buffer at all.
+ * keeps completions, snippets and auto-closing pairs from typing code on the
+ * reviewer's behalf. It is held only while guidance is armed and the reviewed
+ * file is the active editor; with editing enabled it is dropped outright, so
+ * input takes the editor's own path.
  */
 export class RetypeController implements vscode.Disposable {
   private session?: Session;
@@ -117,10 +136,11 @@ export class RetypeController implements vscode.Disposable {
   private emitter = new vscode.EventEmitter<void>();
   /** Fires when a review finishes, ends, or is otherwise torn down. */
   readonly onDidFinish = this.emitter.event;
-
-  /** Text still owed: kept in the buffer, rendered dimmed until typed over. */
+  /** Text still owed: kept in the buffer, rendered dimmed until typed over.
+   * Dim enough to read as still owed, light enough to actually read — the
+   * next character has to be legible, because guidance insists on exactly it. */
   private pending = vscode.window.createTextEditorDecorationType({
-    opacity: '0.35',
+    opacity: '0.55',
   });
   /** The section being worked on right now. */
   private currentSection = vscode.window.createTextEditorDecorationType({
@@ -132,8 +152,9 @@ export class RetypeController implements vscode.Disposable {
     overviewRulerColor: new vscode.ThemeColor('focusBorder'),
     overviewRulerLane: vscode.OverviewRulerLane.Left,
   });
-  /** A section the reviewer took over and wrote themselves. Marked, because
-   * guidance going quiet is otherwise indistinguishable from it being broken. */
+  /** A closed section the reviewer wrote in themselves. Marked, because a
+   * review's own record of what happened should be visible in the file it
+   * happened to, not only in the summary at the end. */
   private takenOver = vscode.window.createTextEditorDecorationType({
     isWholeLine: true,
     borderWidth: '0 0 0 2px',
@@ -142,9 +163,28 @@ export class RetypeController implements vscode.Disposable {
     overviewRulerColor: new vscode.ThemeColor('editorInfo.foreground'),
     overviewRulerLane: vscode.OverviewRulerLane.Left,
   });
-  /** The exact text the next keystroke should produce. */
+  /** The exact text the next keystroke should produce. Outlined as well as
+   * filled, so it is the one thing on the line that cannot be missed — and an
+   * outline takes no space, so nothing shifts under the caret. */
   private nextTarget = vscode.window.createTextEditorDecorationType({
     backgroundColor: new vscode.ThemeColor('editor.findMatchBackground'),
+    outlineWidth: '1px',
+    outlineStyle: 'solid',
+    outlineColor: new vscode.ThemeColor('focusBorder'),
+  });
+  /** The active section while editing is enabled. It carries the same box as
+   * the armed highlight — where the review is pointing is the same question in
+   * both states, and answering it only half the time reads as the highlight
+   * being broken — and a different edge colour, because what a keystroke does
+   * there is not the same question at all. */
+  private editingSection = vscode.window.createTextEditorDecorationType({
+    isWholeLine: true,
+    backgroundColor: new vscode.ThemeColor('editor.rangeHighlightBackground'),
+    borderWidth: '0 0 0 2px',
+    borderStyle: 'solid',
+    borderColor: new vscode.ThemeColor('editorWarning.foreground'),
+    overviewRulerColor: new vscode.ThemeColor('editorWarning.foreground'),
+    overviewRulerLane: vscode.OverviewRulerLane.Left,
   });
   /** Animation for accepted keystrokes, fills, and mismatches. Decoration
    * only: it trails the engine and never affects what a keystroke does. */
@@ -300,7 +340,15 @@ export class RetypeController implements vscode.Disposable {
       return;
     }
 
-    this.session = { root, file, document, sections, locked: false };
+    this.session = {
+      root,
+      file,
+      document,
+      original: current,
+      sections,
+      locked: false,
+      editing: false,
+    };
     this.overrideLost = false;
     this.syncTypeOverride();
     if (!this.typeOverride) {
@@ -313,12 +361,20 @@ export class RetypeController implements vscode.Disposable {
       return;
     }
 
-    if (lockDuringReview()) {
-      // Opt-in strict mode: with the editor read-only for the session, every
-      // gesture other than a matched keystroke is inert, so nothing can reach
-      // the buffer that the matching engine didn't authorise.
-      this.session.locked = true;
-      await vscode.commands.executeCommand(SET_READONLY);
+    if (startEditing()) {
+      // Opt-in: hand the editor over before the first keystroke, for someone
+      // who mostly rewrites what the agent wrote. The override was just taken
+      // and is dropped again here: the probe above is the only way to find out
+      // whether guidance *could* run, and the answer matters even when it isn't
+      // running yet.
+      this.session.editing = true;
+      this.syncTypeOverride();
+    } else {
+      // Guidance starts armed: with the editor read-only for the session, every
+      // gesture other than a matched keystroke is inert, so nothing reaches the
+      // buffer that the matching engine didn't authorise. Ctrl+E is how the
+      // reviewer asks for more than that.
+      await this.arm(this.session);
     }
 
     this.fx.bind(document);
@@ -340,7 +396,9 @@ export class RetypeController implements vscode.Disposable {
   private syncTypeOverride(): void {
     const s = this.session;
     const wanted =
-      s !== undefined && vscode.window.activeTextEditor?.document === s.document;
+      s !== undefined &&
+      !s.editing &&
+      vscode.window.activeTextEditor?.document === s.document;
     if (wanted === (this.typeOverride !== undefined)) return;
     if (!wanted) {
       this.typeOverride?.dispose();
@@ -407,75 +465,125 @@ export class RetypeController implements vscode.Disposable {
     const from = engine.position;
 
     if (engine.handleInput(args.text ?? '').kind === 'reject') {
-      await this.diverge(focus, section, args);
+      this.reject(section);
       return;
     }
     section.position = engine.position;
     section.touched = true;
-    section.diverged = 0;
     this.animateRun(section, from, engine.position, 'strike');
     await this.settle(section);
   }
 
   /**
-   * A keystroke that isn't the character this section owes. It is still a real
-   * keystroke, so it goes into the buffer — but it is counted, and a run of them
-   * hands the section over to the reviewer for good.
-   *
-   * The character is written with an explicit edit rather than handed to the
-   * editor's own type handler, for two reasons. It resolves only once the
-   * document change has reached the extension, so the section has already been
-   * remapped around the new character and its position stepped over it — no part
-   * of this has to race the change event. And it inserts exactly the character
-   * that was typed: while a section is still being matched, an auto-closing pair
-   * adding a bracket the target already has would put the reviewer two
-   * characters away from a target they were one character from. Once the section
-   * goes free, input takes the editor's normal path and every convenience with it.
+   * A keystroke that isn't the character this section owes. Nothing happens to
+   * the buffer: an armed review reproduces the change to the letter, so a wrong
+   * key stays wrong however many times it is repeated and the file cannot drift
+   * a character away from the target by accident. What the reviewer gets instead
+   * is the flash, and the key that hands them the editor — the moment a wrong
+   * key fires is exactly when they want to be told about it.
    */
-  private async diverge(
-    focus: Focus,
-    section: Section,
-    args: { text: string }
-  ): Promise<void> {
-    const s = this.session;
-    if (!s) return;
-    if (s.locked) {
-      // Nothing can be inserted while the lock option holds, so a mismatch
-      // stays a mismatch however many times it is repeated.
-      this.flashMismatch(section);
-      this.updateUi('wrong key');
+  private reject(section: Section): void {
+    this.flashMismatch(section);
+    this.updateUi('wrong key — Ctrl+E to write here');
+  }
+
+  /**
+   * Hand the editor back. The read-only flag lifts, guidance stands down, the
+   * `type` override is dropped so completions, auto-close, Tab and Enter are
+   * the editor's own again, and the reviewer can write, erase, paste and
+   * reformat anywhere in the file.
+   *
+   * Nothing about the review is given up: every section keeps its position,
+   * what is still owed stays dimmed, and changes landing in the buffer are
+   * reconciled exactly as they are the rest of the time. This is a pause, not
+   * an exit.
+   */
+  enableEditing(): Promise<void> {
+    return this.serialize(async () => {
+      const s = this.session;
+      if (!s || s.editing) return;
+      await this.showReview(s);
+      s.editing = true;
+      await this.disarm(s);
+      this.syncTypeOverride();
+      this.updateUi();
+    });
+  }
+
+  /**
+   * Arm guidance again and put the caret back where the section it was working
+   * on left off, so the rest of the change can be typed out from there without
+   * hunting for the position by hand.
+   *
+   * Whatever was written is saved on the way through, while the file is still
+   * writable. An armed review cannot dirty the buffer — a matched keystroke
+   * inserts nothing — and a session-read-only editor refuses a save, so without
+   * this the reviewer's own work would sit in a buffer they cannot write until
+   * the review ends. Saving here keeps disk and buffer in step for as long as
+   * guidance holds the file, and format-on-save lands before the flag goes back
+   * on, where the remapping treats it like any other outside edit.
+   */
+  resumeTyping(): Promise<void> {
+    return this.serialize(async () => {
+      const s = this.session;
+      if (!s || !s.editing) return;
+      await this.showReview(s);
+      s.editing = false;
+      if (s.document.isDirty) {
+        try {
+          await s.document.save();
+        } catch {
+          // Nothing to do about a save that won't go through (the file may be
+          // gone, or read-only on disk); the review carries on regardless.
+        }
+      }
+      await this.arm(s);
+      this.syncTypeOverride();
+      const section = this.activeSection() ?? nextUnclaimed(s.sections);
+      if (section) {
+        s.active = section;
+        this.moveCursorTo(typedBoundary(section));
+      }
+      this.updateUi();
+    });
+  }
+
+  /**
+   * Take and release the editor's session read-only flag — how "guidance is
+   * armed" is said to the editor itself. Printable input still reaches the
+   * `type` override, because the editor dispatches `type` before its read-only
+   * check, which is exactly the split a review wants: matched keystrokes work,
+   * every other way of changing the file does not.
+   *
+   * Both workbench commands act on the active editor, so both gestures bring
+   * the review into focus first. Releasing can also happen when the review is
+   * already over and its tab gone; that case is deferred until the file is next
+   * active, or the file would stay unwritable for the rest of the session.
+   */
+  private async arm(s: Session): Promise<void> {
+    if (s.locked || vscode.window.activeTextEditor?.document !== s.document) {
       return;
     }
+    s.locked = true;
+    await vscode.commands.executeCommand(SET_READONLY);
+  }
 
-    section.diverged++;
-    const budget = freeEditAfter();
-    const takeOver = section.diverged >= budget;
-    if (!takeOver) this.flashMismatch(section);
-
-    const at = s.document.positionAt(typedBoundary(section));
-    try {
-      await focus.editor.edit((edit) => edit.insert(at, args.text), {
-        // A run of the reviewer's own characters undoes as one gesture, the way
-        // typing anywhere else in the editor does.
-        undoStopBefore: false,
-        undoStopAfter: false,
-      });
-    } catch {
-      // The editor went away (closed, or replaced) between the keystroke and
-      // the edit. The teardown that follows will notice; nothing to add here.
-      return;
-    }
-
-    if (takeOver) {
-      section.free = true;
-      section.outcome = 'edited';
-      this.note(
-        `this section is yours — guidance stepped aside after ${budget} characters of your own.`
-      );
+  private async disarm(s: Session): Promise<void> {
+    if (!s.locked) return;
+    s.locked = false;
+    if (
+      vscode.window.activeTextEditor?.document === s.document &&
+      this.reviewTabOpen(s.document)
+    ) {
+      await vscode.commands.executeCommand(RESET_READONLY);
     } else {
-      this.moveCursorTo(typedBoundary(section));
+      this.pendingReadonlyReset.add(s.document.uri.toString());
     }
-    this.updateUi();
+  }
+
+  private async showReview(s: Session): Promise<void> {
+    if (vscode.window.activeTextEditor?.document === s.document) return;
+    await vscode.window.showTextDocument(s.document, { preview: false });
   }
 
   /** Enter is dispatched as an editor command, not `type` input, so it is
@@ -567,7 +675,7 @@ export class RetypeController implements vscode.Disposable {
       this.updateUi();
       return;
     }
-    await this.claim(section, section.touched ? 'typed' : 'skipped');
+    await this.claim(section, outcomeOf(section));
   }
 
   /**
@@ -575,10 +683,7 @@ export class RetypeController implements vscode.Disposable {
    * still owed. Reaching the end this way completes the review — a reviewer who
    * just keeps typing never has to ask for the next section or for the finish.
    */
-  private async claim(
-    section: Section,
-    outcome: 'typed' | 'skipped' | 'confirmed'
-  ): Promise<void> {
+  private async claim(section: Section, outcome: SectionOutcome): Promise<void> {
     const s = this.session;
     if (!s) return;
     section.outcome = outcome;
@@ -644,10 +749,6 @@ export class RetypeController implements vscode.Disposable {
     return { claimed: claimedCount(s.sections), total: s.sections.length };
   }
 
-  /**
-   * Drop the review of a file because its debt was cleared some other way —
-   * marked reviewed from the view, or auto-skipped.
-   */
   async forget(file: string): Promise<void> {
     if (this.session?.file === file) {
       await this.stop(
@@ -659,10 +760,10 @@ export class RetypeController implements vscode.Disposable {
   // --- ending -----------------------------------------------------------------
 
   /**
-   * Stop reviewing without recording an outcome. Unlike the read-only era there
-   * is nothing to restore: whatever the reviewer typed or rewrote is already in
-   * the file, and the file's debt is recomputed from its content the next time
-   * the queue is read.
+   * Stop reviewing without recording an outcome. Nothing has to be put back:
+   * whatever the reviewer typed or wrote themselves is already in the file, the
+   * read-only flag comes off on the way out, and the file's debt is recomputed
+   * from its content the next time the queue is read.
    */
   abort(message?: string): Promise<void> {
     return this.serialize(async () => {
@@ -677,7 +778,7 @@ export class RetypeController implements vscode.Disposable {
     const s = this.session;
     if (!s) return;
     this.session = undefined;
-    await this.clearReadonly(s);
+    await this.disarm(s);
     await this.teardown();
     void vscode.window.setStatusBarMessage(`CopyWorkCode: ${message}`, 6000);
   }
@@ -710,7 +811,7 @@ export class RetypeController implements vscode.Disposable {
     const counts = outcomeCounts(s.sections);
     // Read-only must lift before the save — a session-read-only editor may
     // refuse it.
-    await this.clearReadonly(s);
+    await this.disarm(s);
     try {
       await s.document.save();
     } catch {
@@ -774,33 +875,19 @@ export class RetypeController implements vscode.Disposable {
       editor.setDecorations(this.pending, []);
       editor.setDecorations(this.currentSection, []);
       editor.setDecorations(this.takenOver, []);
+      editor.setDecorations(this.editingSection, []);
       editor.setDecorations(this.nextTarget, []);
     }
     await this.setContext('copyworkcode.reviewing', false);
     await this.setContext('copyworkcode.reviewEditorFocused', false);
     await this.setContext('copyworkcode.sectionActive', false);
     await this.setContext('copyworkcode.guided', false);
+    await this.setContext('copyworkcode.editing', false);
     await this.setContext('copyworkcode.reviewComplete', false);
     this.lensKey = '';
     this.paintKey = '';
     this.lensEmitter.fire();
     this.emitter.fire();
-  }
-
-  /** Lift the session read-only flag if this review set it. The workbench
-   * command targets the active editor only, so the reset can run right away
-   * only while the reviewed file really is the active editor; every other case
-   * defers it until the file next becomes active. */
-  private async clearReadonly(s: Session): Promise<void> {
-    if (!s.locked) return;
-    if (
-      vscode.window.activeTextEditor?.document === s.document &&
-      this.reviewTabOpen(s.document)
-    ) {
-      await vscode.commands.executeCommand(RESET_READONLY);
-    } else {
-      this.pendingReadonlyReset.add(s.document.uri.toString());
-    }
   }
 
   /** True while any tab still shows the reviewed document — as a plain
@@ -858,33 +945,44 @@ export class RetypeController implements vscode.Disposable {
       changes[0].to === before &&
       before > 0
     ) {
-      this.rebuild(s);
+      this.rebuild(
+        s,
+        'the file was replaced — the review restarted from its new content.'
+      );
       return;
     }
+    if (s.editing) markHandEdited(s.sections, changes);
     remapSections(s.sections, changes, after);
     if (s.active && isClaimed(s.active)) s.active = undefined;
     this.updateUi();
   }
 
-  /** Re-derive the sections for a document that was replaced under the review. */
-  private rebuild(s: Session): void {
+  /**
+   * Re-derive the sections for a document that was replaced under the review —
+   * by a revert, a reload from disk, or a reset. Whatever the buffer holds now
+   * is what is under review from here on, so the record of the version being
+   * reviewed moves with it.
+   */
+  private rebuild(s: Session, note?: string): boolean {
     const baseline = this.source.baselineFor(s.file);
     if (baseline === undefined) {
       void this.stop(
         'review ended — there is nothing to compare this file against any more.'
       );
-      return;
+      return false;
     }
-    s.sections = buildSections(baseline, s.document.getText());
+    s.original = s.document.getText();
+    s.sections = buildSections(baseline, s.original);
     s.active = undefined;
     if (s.sections.length === 0) {
       void this.stop('review ended — the reloaded file has nothing left to review.');
-      return;
+      return false;
     }
-    this.note('the file was replaced — the review restarted from its new content.');
+    if (note) this.note(note);
     const first = nextUnclaimed(s.sections);
     if (first) s.active = first;
     this.updateUi();
+    return true;
   }
 
   /** A throttled aside for something structural the reviewer should know about.
@@ -901,19 +999,25 @@ export class RetypeController implements vscode.Disposable {
   /**
    * Where the cursor is in relation to the review.
    *
-   * Guidance covers the whole of what a section still owes — the dimmed run —
-   * rather than the single offset its next character sits at. Requiring the
-   * caret to be exactly there made the most ordinary gesture there is (click
-   * into the changed code, start typing) fall through to the plain editor, so
-   * the keystrokes went in *beside* the text they were meant to reproduce
-   * instead of consuming it. Inside the dimmed run, typing is matched; the
-   * keystroke applies at the typing position wherever in that run the caret
-   * happens to be, and `snapToTypingPosition` keeps the caret there so the
-   * character always appears where it is being typed.
+   * Guidance covers the whole of a section the review still owes, rather than
+   * the single offset its next character sits at. Requiring the caret to be
+   * exactly there made the most ordinary gesture there is (click into the
+   * changed code, start typing) fall through to the plain editor, so the
+   * keystrokes went in *beside* the text they were meant to reproduce instead
+   * of consuming it. Anywhere in the section, typing is matched; the keystroke
+   * applies at the typing position wherever the caret happens to be, and
+   * `snapToTypingPosition` puts the caret there so the character always appears
+   * where it is being typed.
    *
-   * The line that divides guided from ordinary editing is therefore the one
-   * already on screen: dimmed text belongs to the review and typing consumes
-   * it, text already covered is the reviewer's and typing inserts into it. A
+   * That includes the part of the section already covered. Clicking back into
+   * text that has been typed is a click into a section still being worked on,
+   * and the review has one answer for that wherever in the section it lands:
+   * take the caret to where the typing goes and be ready for the next key.
+   *
+   * What is left is the dimmed run against everything else. Inside it, typing
+   * is matched; anywhere else, while guidance is armed, typing is inert — the
+   * override hands the keystroke back and the read-only flag catches it — and
+   * the way to write there is Ctrl+E, which stands guidance down wholesale. A
    * selection or a second cursor is a gesture about the file, not about the one
    * character a section is waiting for, and is left alone either way.
    */
@@ -925,12 +1029,11 @@ export class RetypeController implements vscode.Disposable {
     const section = sectionAt(s.sections, cursor);
     if (!section) return undefined;
     const guided =
+      !s.editing &&
       section.kind === 'type' &&
       !section.free &&
       editor.selection.isEmpty &&
-      editor.selections.length === 1 &&
-      cursor >= typedBoundary(section) &&
-      cursor <= section.end;
+      editor.selections.length === 1;
     return { editor, cursor, section, guided };
   }
 
@@ -950,14 +1053,21 @@ export class RetypeController implements vscode.Disposable {
   }
 
   /**
-   * A click landing in text a section still owes puts the caret on that
+   * A click landing anywhere in a section still owed puts the caret on that
    * section's typing position instead of where the click landed. Typing is
-   * matched across the whole dimmed run, so without this the character would
+   * matched across the whole section, so without this the character would
    * appear somewhere other than the caret that asked for it — and the caret is
    * the one thing a reader trusts about where their typing goes.
    *
-   * Only inside the dimmed run: text already covered is the reviewer's, and a
-   * caret they put there to fix something stays where they put it.
+   * Landing in the part already typed snaps too. A click there is not a request
+   * to write in the middle of covered text — nothing would accept it — it is
+   * someone pointing at the section they want to work on, and the answer is to
+   * be ready for them to type rather than to sit inert until they find the
+   * exact offset for themselves.
+   *
+   * Only inside a section, and only while guidance is armed: a caret the
+   * reviewer put somewhere to read, or put anywhere at all with editing on,
+   * stays where they put it.
    */
   private snapToTypingPosition(): void {
     const focus = this.focus();
@@ -1079,6 +1189,17 @@ export class RetypeController implements vscode.Disposable {
         'copyworkcode.abortReview',
         'Stop this review — your edits stay in the file and the debt stays (Shift+Esc)'
       );
+      const editLens = s.editing
+        ? lens(
+            'Back to typing',
+            'copyworkcode.resumeTyping',
+            'Match the target again, from where this section left off (Ctrl+E)'
+          )
+        : lens(
+            'Write here',
+            'copyworkcode.enableEditing',
+            'Edit the file yourself — guidance stands down until you come back (Ctrl+E)'
+          );
       if (section.kind === 'confirm') {
         lenses.push(
           lens(`${section.removedLines} line(s) deleted here · ${where}`, ''),
@@ -1087,6 +1208,7 @@ export class RetypeController implements vscode.Disposable {
             'copyworkcode.confirmSection',
             'Acknowledge the deleted lines and move to the next section (Alt+S)'
           ),
+          editLens,
           diffLens,
           stopLens
         );
@@ -1099,11 +1221,9 @@ export class RetypeController implements vscode.Disposable {
           `Typed ${section.position}/${section.target.length} · ${where}${replaces}`,
           ''
         ),
-        lens(
-          'Fill line',
-          'copyworkcode.fillNextLine',
-          'Fill in the rest of this line without typing it (Alt+F)'
-        ),
+        // First of the actions: disagreeing with the code is the point of a
+        // review, and the fills are conveniences that don't need advertising.
+        editLens,
         lens(
           'Skip section',
           'copyworkcode.skipSection',
@@ -1143,9 +1263,15 @@ export class RetypeController implements vscode.Disposable {
     );
     void this.setContext('copyworkcode.sectionActive', active !== undefined);
     void this.setContext('copyworkcode.guided', focus?.guided === true);
+    void this.setContext('copyworkcode.editing', s.editing);
     void this.setContext('copyworkcode.reviewComplete', complete);
 
     this.statusBar.text = this.statusText(s, active, focus, note);
+    // The one state where the review is not policing the file at all. It reads
+    // as an ordinary editor from the inside, so the badge has to say so.
+    this.statusBar.backgroundColor = s.editing
+      ? new vscode.ThemeColor('statusBarItem.warningBackground')
+      : undefined;
     this.statusBar.tooltip = `Reviewing ${path.basename(s.file)} against ${
       this.source.baselineLabel
     } — ${complete ? 'click to finish' : 'click to jump to the next section'}`;
@@ -1159,6 +1285,7 @@ export class RetypeController implements vscode.Disposable {
     const key = [
       claimed,
       s.sections.length,
+      s.editing,
       active ? s.sections.indexOf(active) : -1,
       active?.position ?? -1,
       active?.target.length ?? -1,
@@ -1186,6 +1313,7 @@ export class RetypeController implements vscode.Disposable {
     const key = [
       s.document.version,
       editors.length,
+      s.editing,
       active ? s.sections.indexOf(active) : -1,
       focus?.guided ? focus.cursor : -1,
       s.sections
@@ -1224,7 +1352,8 @@ export class RetypeController implements vscode.Disposable {
     for (const editor of editors) {
       editor.setDecorations(this.pending, owed);
       editor.setDecorations(this.takenOver, takenOver);
-      editor.setDecorations(this.currentSection, highlight);
+      editor.setDecorations(this.currentSection, s.editing ? [] : highlight);
+      editor.setDecorations(this.editingSection, s.editing ? highlight : []);
       editor.setDecorations(this.nextTarget, target ? [target] : []);
     }
   }
@@ -1240,6 +1369,12 @@ export class RetypeController implements vscode.Disposable {
     const flag = note ? `$(error) ${note} — ` : '';
     const stop = 'Shift+Esc stop';
 
+    if (s.editing) {
+      return (
+        `${flag}$(unlock) Editing · Review ${claimed}/${total} claimed — ` +
+        `Ctrl+E back to typing · ${stop}`
+      );
+    }
     if (claimed >= total) {
       return `${flag}$(check) Review ${claimed}/${total} claimed — Alt+Enter finish · ${stop}`;
     }
@@ -1262,7 +1397,7 @@ export class RetypeController implements vscode.Disposable {
       : 'Alt+J to the typing position';
     return (
       `${flag}$(keyboard) Review ${claimed}/${total} · ${at} — ` +
-      `Alt+F line · Alt+S skip · Alt+J jump · ${stop}`
+      `Alt+F line · Alt+S skip · Ctrl+E write · ${stop}`
     );
   }
 
@@ -1283,6 +1418,7 @@ export class RetypeController implements vscode.Disposable {
     this.pending.dispose();
     this.currentSection.dispose();
     this.takenOver.dispose();
+    this.editingSection.dispose();
     this.nextTarget.dispose();
     this.lensProvider.dispose();
     this.lensEmitter.dispose();
@@ -1291,20 +1427,35 @@ export class RetypeController implements vscode.Disposable {
   }
 }
 
-/** Keep the review editor read-only for the session, so nothing but a matched
- * keystroke can change the buffer. Off by default: edit mode is the point. */
-function lockDuringReview(): boolean {
+/** Whether a review opens with editing enabled instead of guidance armed. */
+function startEditing(): boolean {
   return vscode.workspace
     .getConfiguration('copyworkcode')
-    .get<boolean>('lockDuringReview', false);
+    .get<boolean>('startEditing', false);
 }
 
-/** Consecutive unmatched characters that hand a section over to the reviewer. */
-function freeEditAfter(): number {
-  const configured = vscode.workspace
-    .getConfiguration('copyworkcode')
-    .get<number>('freeEditAfter', 10);
-  return Number.isFinite(configured) && configured >= 1
-    ? Math.floor(configured)
-    : 10;
+/** How a `type` section that just closed is recorded. Text the reviewer wrote
+ * themselves outranks the rest: what matters afterwards is that the file no
+ * longer says only what the agent wrote. */
+function outcomeOf(section: Section): SectionOutcome {
+  if (section.handEdited) return 'edited';
+  return section.touched ? 'typed' : 'skipped';
+}
+
+/** Note which sections the reviewer's own writing landed in, so one they took
+ * over reads as edited rather than typed when it closes. Only while editing is
+ * enabled: every other change is a formatter, an agent, or the review itself,
+ * and none of those is the reviewer taking the code over. */
+function markHandEdited(
+  sections: readonly Section[],
+  changes: readonly TextChange[]
+): void {
+  for (const change of changes) {
+    for (const section of sections) {
+      if (isClaimed(section) || section.kind !== 'type') continue;
+      if (change.from <= section.end && change.to >= section.start) {
+        section.handEdited = true;
+      }
+    }
+  }
 }

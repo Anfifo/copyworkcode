@@ -77,6 +77,12 @@ export function activate(context: vscode.ExtensionContext): void {
       retype?.finishReview()
     ),
     vscode.commands.registerCommand('copyworkcode.typeEnter', () => retype?.typeEnter()),
+    vscode.commands.registerCommand('copyworkcode.enableEditing', () =>
+      retype?.enableEditing()
+    ),
+    vscode.commands.registerCommand('copyworkcode.resumeTyping', () =>
+      retype?.resumeTyping()
+    ),
     vscode.commands.registerCommand('copyworkcode.focusSection', (offset: number) =>
       retype?.focusSection(offset)
     ),
