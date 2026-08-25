@@ -40,8 +40,19 @@ export interface Section {
   end: number;
   /** Document text of `[start, end)` — the retype target. '' for `confirm`. */
   target: string;
-  /** How many baseline lines disappeared at this section (context for the UI). */
-  removedLines: number;
+  /** The baseline lines that disappeared at this section, as text. Kept whole
+   * rather than counted because a removal leaves nothing in the buffer to look
+   * at: the text here is the only record of what went, and the surface shows it
+   * on demand. Sticky across remapping, like `removedAtEnd` — later edits move
+   * the section's offsets but cannot change what the baseline lost. */
+  removedLines: string[];
+  /** True when the removed lines were past the end of the file, so no line
+   * follows them. The boundary a removal leaves behind is normally the line
+   * that took its place; at the end of a file there is no such line, and the
+   * only honest place to mark it is below the last one that survived. Sticky
+   * across remapping: text appended afterwards moves the section's offsets but
+   * does not change which end of the file the removal happened at. */
+  removedAtEnd: boolean;
   /** Characters of `target` already claimed, from `start`. */
   position: number;
   /** True once any keystroke was matched here — what separates typed from
@@ -72,13 +83,18 @@ export function buildSections(baseline: string, current: string): Section[] {
 
   return diffLines(baseline, current).map((hunk) => {
     const start = offsetOfLine(hunk.currentStart);
+    // Nothing follows a removal that ran off the end of the file. A hunk with
+    // added lines always lands on a line that exists, so only a deletion can
+    // be in this position.
+    const removedAtEnd = hunk.currentStart >= starts.length;
     if (hunk.addedLines.length === 0) {
       return blank({
         kind: 'confirm',
         start,
         end: offsetOfLine(hunk.currentStart + 1),
         target: '',
-        removedLines: hunk.removedLines.length,
+        removedLines: hunk.removedLines,
+        removedAtEnd,
       });
     }
     const end = offsetOfLine(hunk.currentStart + hunk.addedLines.length);
@@ -87,7 +103,8 @@ export function buildSections(baseline: string, current: string): Section[] {
       start,
       end,
       target: current.slice(start, end),
-      removedLines: hunk.removedLines.length,
+      removedLines: hunk.removedLines,
+      removedAtEnd,
     });
   });
 }
@@ -283,7 +300,10 @@ export function nextUnclaimed(
 }
 
 function blank(
-  base: Pick<Section, 'kind' | 'start' | 'end' | 'target' | 'removedLines'>
+  base: Pick<
+    Section,
+    'kind' | 'start' | 'end' | 'target' | 'removedLines' | 'removedAtEnd'
+  >
 ): Section {
   return { ...base, position: 0, touched: false, handEdited: false, free: false };
 }

@@ -15,6 +15,18 @@ promoted here when they're deemed worth building.
       as an obstruction: the wrong-key case it exists for is fixed, but every other way of
       touching the file now goes through Ctrl+E first, and only use will say whether that
       is one keystroke too many.
+      A third thing to look at, this one only checkable by eye: the removal mark and the
+      hover behind it. The first pass answered the loudest questions — the count left the
+      right margin for the gutter and the lens, the rule left replacements, and the whole
+      mark now clears when its section is claimed — but decorations are write-only, so
+      what is left is still eye-only. Two specifics. Whether a drawn gutter badge stays
+      legible across themes and font sizes, since it is an image and cannot ask a theme
+      for its colour. And whether the hover still fires when the marked line is blank, the
+      one case where there is no text under the pointer. In the demo workspace,
+      `trimmed.ts` holds the two removals with nowhere obvious to go, `overhaul.ts` the
+      everyday mix of added, replaced and deleted lines, and `churn.ts` the pile-up: four
+      sections in eight lines, one of them hiding eight removed lines behind two added
+      ones.
 - [ ] **Per-project override for content exclusion** — the exclusion patterns are fixed;
       a project keeping secrets under a name the list doesn't cover has no way to add it,
       and no way to reclaim a source file the list catches by mistake.

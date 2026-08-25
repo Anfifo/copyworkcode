@@ -90,7 +90,9 @@ test('buildSections marks a deletion-only change as a confirm section', () => {
   assert.equal(sections.length, 1);
   assert.equal(sections[0].kind, 'confirm');
   assert.equal(sections[0].target, '');
-  assert.equal(sections[0].removedLines, 1);
+  // The text, not a count: a deletion leaves nothing in the file to look at, so
+  // this is the only record of what it took.
+  assert.deepEqual(sections[0].removedLines, ['gone']);
 });
 
 test('buildSections handles a deletion at the end of the file', () => {
@@ -100,6 +102,26 @@ test('buildSections handles a deletion at the end of the file', () => {
   // of the document instead of pointing at a line that is not there.
   assert.equal(sections[0].start, current.length);
   assert.equal(sections[0].end, current.length);
+  // No line follows the removal, so its boundary has to be drawn below the
+  // last line that survived rather than above the one that took its place.
+  assert.equal(sections[0].removedAtEnd, true);
+});
+
+test('buildSections flags a mid-file deletion as not at the end', () => {
+  const sections = buildSections('a\ngone\nb\n', 'a\nb\n');
+  assert.equal(sections[0].kind, 'confirm');
+  assert.equal(sections[0].removedAtEnd, false);
+});
+
+test('buildSections records the removed lines a replacement swallowed', () => {
+  const sections = buildSections('a\nold\nb\n', 'a\nnew\nb\n');
+  assert.equal(sections.length, 1);
+  assert.equal(sections[0].kind, 'type');
+  assert.equal(sections[0].target, 'new\n');
+  // A replacement removes lines too, and they are just as invisible as a
+  // deletion-only change unless something says they were there.
+  assert.deepEqual(sections[0].removedLines, ['old']);
+  assert.equal(sections[0].removedAtEnd, false);
 });
 
 test('buildSections keeps CRLF offsets aligned with the raw text', () => {

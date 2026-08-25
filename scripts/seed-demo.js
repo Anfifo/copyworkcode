@@ -175,6 +175,146 @@ seed(
   ].join('\n')
 );
 
+// The two removals `cleanup.ts` cannot show: one line swapped for another — a
+// replacement, whose removed line hides behind the added one — and a run
+// deleted off the end of the file, which has no following line to mark. The
+// last line is deliberately not a closing brace: a deleted trailing function
+// leaves its `}` behind as common context, so a removal genuinely lands at the
+// end of a file only when the file ends with something else.
+seed(
+  'trimmed.ts',
+  ['export const MAX_RETRIES = 5;', 'export const BACKOFF_MS = 250;', ''].join('\n'),
+  [
+    'export const MAX_RETRIES = 3;',
+    'export const BACKOFF_MS = 250;',
+    '',
+    "// Superseded by the queue's own backoff.",
+    'export const LEGACY_TIMEOUT_MS = 5000;',
+    'export const LEGACY_MAX_RETRIES = 10;',
+    '',
+  ].join('\n')
+);
+
+// Added, replaced and deleted lines interleaved through one file — the shape
+// most real agent edits have, and the one every other file here takes apart
+// into a single kind. Additions and replacements carry their own text; the
+// deletion in `execute` has none, so it is the only change here the surface
+// has to mark rather than colour.
+seed(
+  'overhaul.ts',
+  [
+    "import { readFile } from 'node:fs/promises';",
+    "import { setTimeout as sleep } from 'node:timers/promises';",
+    '',
+    'export interface Job {',
+    '  id: string;',
+    '  attempts: number;',
+    '  priority: number;',
+    '}',
+    '',
+    'export class Runner {',
+    '  private queue: Job[] = [];',
+    '  private failed: Job[] = [];',
+    '',
+    '  constructor(private readonly limit: number, private readonly retries = 3) {}',
+    '',
+    '  push(job: Job): void {',
+    '    this.queue.push(job);',
+    '    this.queue.sort((a, b) => b.priority - a.priority);',
+    '  }',
+    '',
+    '  async run(): Promise<void> {',
+    '    const running: Promise<void>[] = [];',
+    '    for (const job of this.queue.splice(0, this.limit)) {',
+    '      running.push(this.execute(job));',
+    '      await sleep(10);',
+    '    }',
+    '    await Promise.all(running);',
+    '  }',
+    '',
+    '  private async execute(job: Job): Promise<void> {',
+    '    job.attempts++;',
+    "    await readFile(job.id, 'utf8');",
+    '  }',
+    '}',
+    '',
+  ].join('\n'),
+  [
+    "import { readFile } from 'node:fs/promises';",
+    '',
+    'export interface Job {',
+    '  id: string;',
+    '  attempts: number;',
+    '}',
+    '',
+    'export class Runner {',
+    '  private queue: Job[] = [];',
+    '',
+    '  constructor(private readonly limit: number) {}',
+    '',
+    '  push(job: Job): void {',
+    '    this.queue.push(job);',
+    '  }',
+    '',
+    '  async run(): Promise<void> {',
+    '    for (const job of this.queue) {',
+    '      await this.execute(job);',
+    '    }',
+    '  }',
+    '',
+    '  private async execute(job: Job): Promise<void> {',
+    '    job.attempts++;',
+    "    console.log('running', job.id);",
+    "    console.log('attempt', job.attempts);",
+    "    await readFile(job.id, 'utf8');",
+    '  }',
+    '}',
+    '',
+  ].join('\n')
+);
+
+// The worst case for the surface: something changed every line or two, so
+// sections land next to each other and a deletion's boundary falls on a line
+// that a neighbouring section already owns. Every mark the review can draw —
+// dimmed text, a section highlight, a removal rule, a count in the margin, a
+// lens strip — competes for the same few lines here. Deliberately denser than
+// real code: if the surface stays readable on this file it stays readable
+// anywhere.
+seed(
+  'churn.ts',
+  [
+    'const RETRY = 5;',
+    'const TIMEOUT_MS = 1000;',
+    '',
+    'export function options(host: string) {',
+    '  const opts = { host, timeout: TIMEOUT_MS, retries: RETRY };',
+    '  const backoff = RETRY * 100;',
+    '  return { ...opts, backoff };',
+    '}',
+    '',
+  ].join('\n'),
+  [
+    'const RETRY = 3;',
+    'const TIMEOUT_MS = 1000;',
+    'const VERBOSE = false;',
+    'const LEGACY_MODE = true;',
+    '',
+    'export function options(host: string) {',
+    '  const label = `${host}:${TIMEOUT_MS}`;',
+    '  const opts = { host, timeout: TIMEOUT_MS, retries: RETRY };',
+    '  if (LEGACY_MODE) {',
+    "    return { ...opts, label, protocol: 'v1' };",
+    '  }',
+    '  return { ...opts, label };',
+    '}',
+    '',
+    'export function describe(host: string): string {',
+    '  return `connecting to ${host}`;',
+    '}',
+    '',
+  ].join('\n')
+);
+
 // Deepening indentation: exercises whitespace snapping (space/enter/tab all
 // apply the target's indentation run).
 seed(
@@ -441,6 +581,8 @@ fs.writeFileSync(
     '- `agent-created.ts` — a file created from scratch (empty baseline); the',
     '  whole file is one section, shown faded, never emptied.',
     '- `cleanup.ts` — removals only; each deletion is a confirm stop in the walk.',
+    '- `trimmed.ts` — a line replaced and a run deleted off the end of the file:',
+    '  the two removals that have no text of their own to mark.',
     '- `indented.ts` — deepening indentation; try space, enter, and tab at the',
     '  indent boundaries.',
     '- `rate-limiter.ts` — a larger file where only three separated sections',

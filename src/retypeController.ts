@@ -17,10 +17,20 @@ import {
   typedBoundary,
 } from './core/sections';
 import { DebtSource } from './debtSource';
+import {
+  Removal,
+  RemovalMarks,
+  deletedLines,
+  lineCount,
+  removalAnchor,
+  removalHover,
+  removalRanges,
+} from './removalMark';
 import { ReviewLog } from './reviewState';
 import { TypingFx } from './typingFx';
 
 export const BASELINE_SCHEME = 'copyworkcode-baseline';
+export const REMOVED_SCHEME = 'copyworkcode-removed';
 
 /** Workbench commands that flip the active editor's session read-only flag. */
 const SET_READONLY = 'workbench.action.files.setActiveEditorReadonlyInSession';
@@ -36,7 +46,38 @@ export function baselineUri(file: string, label: string): vscode.Uri {
   });
 }
 
+/**
+ * The lines one removal took away, as a document of their own.
+ *
+ * Removed text has nowhere in the buffer to live, so showing more than a hover
+ * holds means giving it a file: a virtual one, keyed by the section that lost
+ * the lines, opened in a panel over the line where they used to be. The name
+ * keeps the original extension, which is the only thing a peek has to go on
+ * when it decides how to colour what it shows.
+ */
+export function removedUri(
+  file: string,
+  session: number,
+  start: number,
+  lines: number
+): vscode.Uri {
+  return vscode.Uri.from({
+    scheme: REMOVED_SCHEME,
+    // The review is a directory the name sits in, out of sight of the label the
+    // panel shows. It has to be part of the name somewhere: the editor caches a
+    // virtual document by its URI and never asks for its content again, and one
+    // file reviewed twice can lose different lines at the same offset — the
+    // second review must not be served the first one's text.
+    path: `/${session}/${deletedLines(lines)} from ${path.basename(file)}`,
+    query: String(start),
+  });
+}
+
 interface Session {
+  /** Which review this is, counted from the start of the editor session. Only
+   * the removed-lines documents need it, and only to keep two reviews of one
+   * file from sharing a name. */
+  id: number;
   root: string;
   file: string;
   document: vscode.TextDocument;
@@ -186,6 +227,9 @@ export class RetypeController implements vscode.Disposable {
     overviewRulerColor: new vscode.ThemeColor('editorWarning.foreground'),
     overviewRulerLane: vscode.OverviewRulerLane.Left,
   });
+  /** Boundaries where lines were removed. Owns a decoration type per count, so
+   * unlike the rest it is a class rather than a single type. */
+  private removals = new RemovalMarks();
   /** Animation for accepted keystrokes, fills, and mismatches. Decoration
    * only: it trails the engine and never affects what a keystroke does. */
   private fx = new TypingFx();
@@ -194,8 +238,10 @@ export class RetypeController implements vscode.Disposable {
     vscode.StatusBarAlignment.Left,
     100
   );
+  private sessions = 0;
   private lensEmitter = new vscode.EventEmitter<void>();
   private lensProvider: vscode.Disposable;
+  private hoverProvider: vscode.Disposable;
   private changeGuard: vscode.Disposable;
   private closeGuard: vscode.Disposable;
   private focusGuard: vscode.Disposable;
@@ -264,6 +310,15 @@ export class RetypeController implements vscode.Disposable {
         onDidChangeCodeLenses: this.lensEmitter.event,
         provideCodeLenses: (document) => this.lensesFor(document),
       }
+    );
+    // The removal hover is a provider rather than a message on the decoration:
+    // a decoration hovers where its range is, and a removal's range is the
+    // empty end of a line — on a blank one there is nothing there to point at.
+    // A provider answers for the whole line the removal is marked at, which is
+    // the line a reader would aim for anyway.
+    this.hoverProvider = vscode.languages.registerHoverProvider(
+      { scheme: 'file' },
+      { provideHover: (document, position) => this.removalHoverAt(document, position) }
     );
   }
 
@@ -341,6 +396,7 @@ export class RetypeController implements vscode.Disposable {
     }
 
     this.session = {
+      id: ++this.sessions,
       root,
       file,
       document,
@@ -742,6 +798,93 @@ export class RetypeController implements vscode.Disposable {
     );
   }
 
+  /** One section's removal, in the shape the mark and the hover both take. */
+  private removalOf(s: Session, section: Section): Removal {
+    return {
+      line: s.document.positionAt(section.start).line,
+      text: section.removedLines,
+      atEnd: section.removedAtEnd,
+      replaced: section.kind === 'type',
+    };
+  }
+
+  /** Sections whose removal is still worth marking: the ones the review has
+   * yet to claim. A claimed section's mark has done its job, and the file's
+   * history is the diff's business rather than the overlay's. */
+  private markedRemovals(s: Session): Section[] {
+    return s.sections.filter(
+      (section) => section.removedLines.length > 0 && !isClaimed(section)
+    );
+  }
+
+  /**
+   * The removed lines behind the mark on this line, if there are any.
+   *
+   * Asked for every hover in every file, so it answers nothing at all unless
+   * the position is in the live review and lands on a line a removal was
+   * marked at. It answers for exactly the removals that are marked: a hover
+   * behind nothing visible is a feature only the person who wrote it knows is
+   * there.
+   */
+  private removalHoverAt(
+    document: vscode.TextDocument,
+    position: vscode.Position
+  ): vscode.Hover | undefined {
+    const s = this.session;
+    if (!s || document !== s.document) return undefined;
+    for (const section of this.markedRemovals(s)) {
+      const removal = this.removalOf(s, section);
+      if (removalAnchor(document, removal)?.line !== position.line) continue;
+      // The link carries the section's offset rather than the section: a
+      // command URI is text, and the offset is what survives the round trip.
+      const showAll = vscode.Uri.parse(
+        `command:copyworkcode.peekRemoved?${encodeURIComponent(
+          JSON.stringify([section.start])
+        )}`
+      );
+      return removalHover(document, removal, showAll);
+    }
+    return undefined;
+  }
+
+  /** The whole removal, in a panel over the line it happened at — where the
+   * hover stops. Opened as a peek rather than an editor because the point is
+   * to read the lines against the code that replaced them, without leaving
+   * it. */
+  async peekRemoved(start: number): Promise<void> {
+    const s = this.session;
+    if (!s) return;
+    const section = s.sections.find((candidate) => candidate.start === start);
+    if (!section || section.removedLines.length === 0) return;
+    const anchor = removalAnchor(s.document, this.removalOf(s, section));
+    if (!anchor) return;
+    await vscode.window.showTextDocument(s.document, { preview: false });
+    await vscode.commands.executeCommand(
+      'editor.action.peekLocations',
+      s.document.uri,
+      new vscode.Position(anchor.line, 0),
+      [
+        new vscode.Location(
+          removedUri(s.file, s.id, section.start, section.removedLines.length),
+          new vscode.Range(0, 0, 0, 0)
+        ),
+      ],
+      'peek'
+    );
+  }
+
+  /** Content for a `copyworkcode-removed:` document: the lines the section at
+   * the URI's offset lost. Empty once that section is gone — the review it
+   * belonged to ended, or an edit moved it — which is the honest answer. */
+  removedTextFor(uri: vscode.Uri): string {
+    const s = this.session;
+    if (!s || !uri.path.startsWith(`/${s.id}/`)) return '';
+    const section = s.sections.find(
+      (candidate) => candidate.start === Number(uri.query)
+    );
+    return section ? `${section.removedLines.join('\n')}\n` : '';
+  }
+
   /** Coverage of the live review, for the debt view. */
   progressFor(file: string): ReviewProgress | undefined {
     const s = this.session;
@@ -760,10 +903,10 @@ export class RetypeController implements vscode.Disposable {
   // --- ending -----------------------------------------------------------------
 
   /**
-   * Stop reviewing without recording an outcome. Nothing has to be put back:
-   * whatever the reviewer typed or wrote themselves is already in the file, the
-   * read-only flag comes off on the way out, and the file's debt is recomputed
-   * from its content the next time the queue is read.
+   * Stop reviewing without recording an outcome. Unlike the read-only era there
+   * is nothing to restore: whatever the reviewer typed or rewrote is already in
+   * the file, and the file's debt is recomputed from its content the next time
+   * the queue is read.
    */
   abort(message?: string): Promise<void> {
     return this.serialize(async () => {
@@ -877,6 +1020,7 @@ export class RetypeController implements vscode.Disposable {
       editor.setDecorations(this.takenOver, []);
       editor.setDecorations(this.editingSection, []);
       editor.setDecorations(this.nextTarget, []);
+      this.removals.apply(editor);
     }
     await this.setContext('copyworkcode.reviewing', false);
     await this.setContext('copyworkcode.reviewEditorFocused', false);
@@ -1165,12 +1309,20 @@ export class RetypeController implements vscode.Disposable {
     for (const section of s.sections) {
       if (isClaimed(section)) continue;
       const lens = lensAt(section.start);
+      // A lens renders above its line, which is where a removal's lines used
+      // to be: the count reads as a fact about the gap it is sitting in rather
+      // than about the code under it, which is the one thing the margin could
+      // never manage.
+      const replaces =
+        section.removedLines.length > 0
+          ? ` · replaces ${lineCount(section.removedLines.length)}`
+          : '';
       if (section !== active) {
         lenses.push(
           lens(
             section.kind === 'confirm'
-              ? `${section.removedLines} line(s) deleted here — review this`
-              : 'Not reviewed yet — start here',
+              ? `${deletedLines(section.removedLines.length)} here — review this`
+              : `Not reviewed yet — start here${replaces}`,
             'copyworkcode.focusSection',
             'Put the cursor at this section and start typing it',
             [section.start]
@@ -1202,7 +1354,7 @@ export class RetypeController implements vscode.Disposable {
           );
       if (section.kind === 'confirm') {
         lenses.push(
-          lens(`${section.removedLines} line(s) deleted here · ${where}`, ''),
+          lens(`${deletedLines(section.removedLines.length)} here · ${where}`, ''),
           lens(
             'Confirm deletion',
             'copyworkcode.confirmSection',
@@ -1214,8 +1366,6 @@ export class RetypeController implements vscode.Disposable {
         );
         continue;
       }
-      const replaces =
-        section.removedLines > 0 ? ` · replaces ${section.removedLines} line(s)` : '';
       lenses.push(
         lens(
           `Typed ${section.position}/${section.target.length} · ${where}${replaces}`,
@@ -1346,6 +1496,14 @@ export class RetypeController implements vscode.Disposable {
       }
     }
 
+    // A removal is the one change with no text of its own to carry a
+    // decoration, so it gets a mark of its own — for as long as its section is
+    // still owed, and not a moment after it is claimed.
+    const removals = removalRanges(
+      s.document,
+      this.markedRemovals(s).map((section) => this.removalOf(s, section))
+    );
+
     const highlight = active ? [lines(active)] : [];
     const target = focus?.guided ? this.nextTargetRange(focus.section) : undefined;
 
@@ -1355,6 +1513,7 @@ export class RetypeController implements vscode.Disposable {
       editor.setDecorations(this.currentSection, s.editing ? [] : highlight);
       editor.setDecorations(this.editingSection, s.editing ? highlight : []);
       editor.setDecorations(this.nextTarget, target ? [target] : []);
+      this.removals.apply(editor, removals);
     }
   }
 
@@ -1388,7 +1547,7 @@ export class RetypeController implements vscode.Disposable {
     }
     if (active.kind === 'confirm') {
       return (
-        `${flag}$(diff-removed) Review ${claimed}/${total} · ${active.removedLines} line(s) deleted — ` +
+        `${flag}$(diff-removed) Review ${claimed}/${total} · ${active.removedLines.length} line(s) deleted — ` +
         `Alt+S confirm · Alt+J jump · ${stop}`
       );
     }
@@ -1420,7 +1579,9 @@ export class RetypeController implements vscode.Disposable {
     this.takenOver.dispose();
     this.editingSection.dispose();
     this.nextTarget.dispose();
+    this.removals.dispose();
     this.lensProvider.dispose();
+    this.hoverProvider.dispose();
     this.lensEmitter.dispose();
     this.statusBar.dispose();
     this.emitter.dispose();

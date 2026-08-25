@@ -5,7 +5,7 @@ import { EventQueue } from './eventQueue';
 import { ReviewLog } from './reviewState';
 import { DebtMode, DebtSource } from './debtSource';
 import { DebtDecorations, DebtTreeProvider } from './debtView';
-import { RetypeController, BASELINE_SCHEME } from './retypeController';
+import { RetypeController, BASELINE_SCHEME, REMOVED_SCHEME } from './retypeController';
 import { AmbientDebt } from './ambient';
 import { syncCaptureHook } from './hookInstaller';
 import { matchesAny } from './core/glob';
@@ -24,6 +24,12 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.workspace.registerTextDocumentContentProvider(BASELINE_SCHEME, {
       provideTextDocumentContent: (uri) => source?.baselineFor(uri.query) ?? '',
+    }),
+
+    // Lines a change deleted, given a document of their own so a panel can show
+    // them: the buffer they came from has no room for text that is not there.
+    vscode.workspace.registerTextDocumentContentProvider(REMOVED_SCHEME, {
+      provideTextDocumentContent: (uri) => retype?.removedTextFor(uri) ?? '',
     }),
 
     vscode.commands.registerCommand('copyworkcode.enableWorkspace', () => {
@@ -72,6 +78,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('copyworkcode.skipSection', () => retype?.skipSection()),
     vscode.commands.registerCommand('copyworkcode.fillNextLine', () => retype?.fillNextLine()),
     vscode.commands.registerCommand('copyworkcode.fillNextWord', () => retype?.fillNextWord()),
+    vscode.commands.registerCommand('copyworkcode.peekRemoved', (start: number) =>
+      retype?.peekRemoved(start)
+    ),
     vscode.commands.registerCommand('copyworkcode.abortReview', () => retype?.abort()),
     vscode.commands.registerCommand('copyworkcode.finishReview', () =>
       retype?.finishReview()

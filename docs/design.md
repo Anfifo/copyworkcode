@@ -197,6 +197,106 @@ its own, since guidance going quiet is otherwise indistinguishable from it being
 status bar mirrors coverage and keybindings; clicking it — or Alt+J — snaps the viewport back
 to the typing position after wandering off to read something else.
 
+### Marking what was removed
+
+A removal has no text left in the buffer to dim, so the surface that shows changed code by
+colouring it could not show a deletion at all: a deletion-only change was legible solely as a
+lens above it, and only once the reviewer reached it. It is now marked in the git
+deleted-resource colour, in a language of its own:
+
+- **A rule between the lines, never a highlight on one.** A deletion-only section is anchored
+  at the line *after* the removal, so a whole-line background would colour the one line that
+  demonstrably survived. "Something was removed here" is a fact about the boundary between two
+  lines, and a one-pixel border is the only decoration that can say it without claiming
+  anything about either line's content.
+- **The count in the gutter, and in the lens above the line — never on the line itself.** The
+  count first went in the right margin, where it read as a label on whatever code was sitting
+  there: the one line the removal had not touched. There are exactly two places that are not
+  part of a line's text. The gutter is one, and it carries the number as a drawn badge
+  ("−3"), which doubles as the way to find an unreached removal while scrolling past. The
+  space *above* the line is the other, and it is where the deleted lines physically were — so
+  the lens strip that renders there says it in words, including on sections the reviewer
+  hasn't reached yet. Neither can hold the lines themselves; those are a hover away (see
+  *What was removed, on demand*).
+- **A replacement keeps the badge and gives up the rule.** Its added lines are already dimmed,
+  boxed and lensed, and a red rule across the top of all that was the loudest thing on the
+  screen while saying the least — that lines went to make room is what its lens already says
+  in words. The badge stays, because without a mark nobody would think to hover.
+- **The mark clears when its section is claimed.** It marks work the review still owes, not a
+  permanent fact about the file. An earlier version kept it for the rest of the review, on the
+  grounds that a confirmed deletion would otherwise leave no trace of what happened there —
+  but that trace is the diff's job, and a rule outliving the thing it pointed at is a stain on
+  a line the reviewer has no further business with. The hover goes quiet with it: a hover
+  behind nothing visible is a feature only its author knows is there.
+
+The geometry has one trap worth stating: hunk line numbers come from the diff, which does not
+count a file's trailing newline as opening a line, while an editor does. A removal that ran off
+the end of the file can only be recognised by comparing against the diff's count
+(`countLines`), never the editor's — and once recognised, whether it is drawn above or below
+depends on whether the file ends in a newline. If it does, the empty last line sits exactly
+where the removed text was and the rule goes above it; if the file ends mid-line there is
+nothing left to draw above, and the rule goes under the last surviving line. Decorations cannot
+be read back out of an editor, so none of this can be unit-tested; the four cases are pinned
+down in the extension-host suite instead, which is where a real `TextDocument` exists to be
+wrong about. The hover behind the mark reads the same anchor, so the line it answers on and
+the line the rule is drawn at cannot drift apart.
+
+### What was removed, on demand
+
+The mark provokes a question it cannot answer, and the answer has nowhere in the buffer to
+live: the text is not there any more, and decoration content is a single unstyled run, so
+several removed lines cannot be rendered beside the rule at all. They are shown outside the
+text flow instead, in two steps.
+
+**Hovering the marked line gives the lines back**, as a fenced block in the document's own
+language, so removed code arrives syntax-highlighted rather than as a grey slab. It is a hover
+*provider* rather than a message on the decoration: a decoration hovers where its range is, and
+a removal's range is the empty end of a line — which, on a blank line, is nothing to aim at. A
+provider answers for the whole line the removal was marked at, which is where a reader points
+anyway, and it answers only inside the live review.
+
+**The hover stops at twelve lines and hands the rest to a panel.** A command link opens the
+removed lines as a document of their own, peeked inline over the line they used to occupy, so
+they can be read against the code that replaced them without leaving it. Long removals are cut
+off rather than scrolled: a popup that swallows the file behind it is worse than one that says
+how much it is not showing. The whole-file comparison is still Alt+D's job — this is the part
+of it that belongs where the change happened.
+
+That document is named after the review as well as the section it belongs to. The editor caches
+a virtual document by its URI and never asks for its content again, and one file reviewed twice
+can lose different lines at the same offset; without the review in the name, the second review
+would be served the first one's text. The name keeps the file's extension, which is all a peek
+has to go on when it decides how to colour what it shows.
+
+True inline expansion — lines pushed apart, the old text sitting in place — remains out of
+reach: the API for it is proposed only, so a published extension cannot use it, and neither
+ghost text nor a decoration can hold several syntax-coloured lines. A hover and a panel are
+what the surface can do without one.
+
+Typing has motion, because a surface that only dims and undims text reads as nothing
+happening. An accepted keystroke flashes the run it produced and fades it in over about
+120ms, so the character lands rather than simply appears; typing faster than that leaves a
+short trail of settling characters behind the cursor. Text filled in rather than typed — a
+word, a line, a whole section — gets the same treatment swept left to right, so a fill is
+never mistakable for typing. A mismatch flares on the target it missed and decays over about
+200ms, which reads as a rejection rather than the static red block it replaced.
+
+Editor decorations compile to generated CSS rules: keyframes cannot be declared, and
+transforms are ignored on inline text spans, so a character cannot be scaled or slid. Every
+effect is therefore frame-stepped from the extension — a ladder of decoration types applied
+to a range in turn, one frame per clock tick — and animates only properties that leave layout
+alone: opacity, background, border, and weight (a monospace bold face carries the same
+advance width, so the impact frame cannot reflow the line). Motion that displaces text was
+considered and rejected: the one property that produces it, letter spacing, shifts the whole
+rest of the line with it, and a surface being typed into cannot afford text that jumps under
+the cursor. The clock runs only while something is in flight and the trail is bounded, so an
+idle review costs nothing and a burst of fast typing cannot grow the repaint. Animation is
+strictly decoration — it trails what the matching engine already decided and can never delay
+or change what a keystroke does. `copyworkcode.animations` sets the level: `full`, `subtle`
+(fades only, no flash), or `off`. Extensions get no reduced-motion signal from the editor, and
+a surface that flashes on every keystroke needs an off switch that is not a guess about the
+reader.
+
 ### Two states: guidance armed, or the editor yours
 
 **The review happens in a real buffer, and at any moment it is in one of two states.** The
@@ -556,7 +656,17 @@ tamper-evidence machinery, and keeps the extension out of surveillance territory
   the review to survive an editable buffer, which is why it is pure. `src/typingFx.ts`
   owns the retype overlay's animation and `src/ambient.ts` the no-session change
   highlight, both kept out of the controller so the review flow never interleaves timing
-  or whole-workspace concerns with matching.
+  or whole-workspace concerns with matching. `src/removalMark.ts` owns the mark for removed
+  lines, a module of its own because its geometry is the one part of the overlay that can be
+  got wrong rather than merely look wrong, and it is worth testing on its own.
+  `src/changeSetPanel.ts` hosts the change set page: the webview, the files the document is
+  built from, the baseline advance and the log record. The rules behind it are two core
+  modules — `src/core/changeSet.ts` turns a file's regions into the serializable document the
+  page draws, the one place where the offsets a review works in become the line numbers a
+  reader reads by, and `src/core/changeSetReview.ts` holds what each region owes and what a
+  gesture comes to, including which surface owns a file. Those are the parts that can be got
+  wrong rather than merely look wrong, and the panel is left thin enough to be read at a
+  glance.
 - `hook/` — standalone hook script installed into agent tooling (plain Node, no deps).
 - `test/` — unit tests (`npm test`, Node's built-in runner). The hook script is tested
   end-to-end by spawning it as a subprocess with realistic payloads; installing and
@@ -571,7 +681,12 @@ tamper-evidence machinery, and keeps the extension out of surveillance territory
   bouncing off an armed editor, and all three landing once editing is enabled — and the
   cases that only exist because the buffer is real: a reload from disk, five foreign writes
   moving the sections underneath a live review, the buffer being replaced wholesale,
-  claiming two sections out of order, and the read-only flag lifting when a review ends.
+  claiming two sections out of order, and the read-only flag lifting when a review ends. It is also the only place the removal mark can be checked:
+  decorations are write-only, so what the suite asserts is which line each boundary anchors
+  to, which side of it the rule goes, and what the badge beside it reads, against real
+  documents with and without a trailing newline. Whether a mark *clears* is asked of the
+  hover, which is painted from the same list of still-owed removals and, unlike a
+  decoration, can be read back.
 - `scripts/seed-demo.js` — rebuilds `demo-workspace/` (gitignored, `npm run demo:seed`):
   a small workspace with pre-made baselines and pending debt, one file per interesting
   review case, so the review flow can be tried by hand without an agent session. The

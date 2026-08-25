@@ -85,6 +85,16 @@ async function main(): Promise<void> {
   // Deletion-only change: nothing to retype, acknowledged with one action.
   fs.writeFileSync(path.join(fixture, 'removed.ts'), 'keep\n');
   fs.writeFileSync(path.join(baselines, 'removed.ts'), 'keep\ngone\n');
+  // A removal with text worth showing: what the hover behind the mark holds.
+  fs.writeFileSync(path.join(fixture, 'deleted.ts'), 'keep\ntail\n');
+  fs.writeFileSync(
+    path.join(baselines, 'deleted.ts'),
+    'keep\nfirst gone\nsecond gone\ntail\n'
+  );
+  // A deletion confirmed while the review carries on: the mark, and the hover
+  // behind it, go quiet with the section rather than outliving it.
+  fs.writeFileSync(path.join(fixture, 'cleared.ts'), 'k1\nk3\nadded\n');
+  fs.writeFileSync(path.join(baselines, 'cleared.ts'), 'k1\ngone\nk3\n');
   // Clicked back into text already typed, which is a click into the section
   // like any other: the caret goes to where the typing goes.
   fs.writeFileSync(path.join(fixture, 'retouch.ts'), 't1\nabcdef\n');

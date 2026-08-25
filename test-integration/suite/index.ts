@@ -2,6 +2,9 @@ import { strict as assert } from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { countLines } from '../../src/core/diff';
+import { badgeLabel, removalHover, removalRanges } from '../../src/removalMark';
+import { removedUri } from '../../src/retypeController';
 
 /**
  * End-to-end checks inside a live extension host. A review is armed by default,
@@ -621,6 +624,182 @@ export async function run(): Promise<void> {
   );
   assert.equal(reviews().length, 21, 'the review that opened editable is recorded');
   assert.equal(reviews()[20].hunksEdited, 1, 'recorded as a section written in');
+
+  // --- Where a removal's boundary lands ------------------------------------
+  // Decorations cannot be read back out of an editor, so nothing here can prove
+  // the mark looks right. What it does pin down is the part that could be
+  // *wrong* rather than merely ugly: which line each removal is anchored to and
+  // which side of it the rule goes, against real documents rather than a model
+  // of one. Line counting is the trap — the diff does not count a trailing
+  // newline as a line and an editor does.
+  const openText = async (content: string) =>
+    vscode.workspace.openTextDocument({ content, language: 'plaintext' });
+  const tail = ['four', 'five', 'six', 'seven'];
+  const gone = Array.from({ length: 9 }, (_, i) => `was line ${i}`);
+
+  const terminated = await openText('one\ntwo\nthree\n');
+  const deletion = { line: 1, text: ['first gone', 'second gone'], atEnd: false, replaced: false };
+  const mid = removalRanges(terminated, [deletion]);
+  assert.equal(mid.below.length, 0, 'a mid-file removal is not marked from below');
+  assert.equal(mid.above.length, 1);
+  assert.equal(mid.above[0].start.line, 1, 'the rule marks the line that took its place');
+  assert.ok(mid.above[0].isEmpty, 'the boundary is a rule between lines, not a range');
+  assert.equal(mid.badges.length, 1);
+  assert.equal(
+    mid.badges[0].label,
+    '−2',
+    'the badge says how much went, not just that something did'
+  );
+  assert.equal(
+    mid.badges[0].range.start.line,
+    1,
+    'beside the line the rule is drawn at'
+  );
+
+  // A replacement's additions are already dimmed, boxed and lensed, and its
+  // lens says in words that lines went to make room. It keeps the badge, which
+  // is the way in to what it replaced, and gives up the rule.
+  const replacement = removalRanges(terminated, [{ ...deletion, replaced: true }]);
+  assert.deepEqual(
+    [replacement.above.length, replacement.below.length],
+    [0, 0],
+    'a replacement draws no rule over the lines that took the removal place'
+  );
+  assert.equal(replacement.badges.length, 1, 'but is still marked in the gutter');
+  assert.equal(
+    badgeLabel(150),
+    '−99+',
+    'a count too big to read at gutter size stops trying to be exact'
+  );
+
+  // The trailing newline leaves an empty line where the removed text was, so
+  // the rule still goes above a line — that line just has nothing on it.
+  const atEndTerminated = removalRanges(terminated, [
+    { line: countLines('one\ntwo\nthree\n'), text: ['gone'], atEnd: true, replaced: false },
+  ]);
+  assert.equal(atEndTerminated.below.length, 0);
+  assert.equal(atEndTerminated.above.length, 1);
+  assert.equal(
+    atEndTerminated.above[0].start.line,
+    3,
+    'a removal past the end of a newline-terminated file marks its empty last line'
+  );
+  assert.equal(atEndTerminated.badges[0].label, '−1');
+
+  // Ending mid-line leaves nothing above to draw, so the rule moves below.
+  const unterminated = await openText('one\ntwo\nthree');
+  const atEndMidLine = removalRanges(unterminated, [
+    { line: countLines('one\ntwo\nthree'), text: tail, atEnd: true, replaced: false },
+  ]);
+  assert.equal(atEndMidLine.above.length, 0);
+  assert.equal(atEndMidLine.below.length, 1);
+  assert.equal(
+    atEndMidLine.below[0].start.line,
+    2,
+    'with no line past the end, the rule goes under the last one that survived'
+  );
+
+  // A file emptied outright still has one line to hang the rule on.
+  const emptied = await openText('');
+  const allGone = removalRanges(emptied, [{ line: 0, text: gone, atEnd: true, replaced: false }]);
+  assert.equal(allGone.above.length + allGone.below.length, 1, 'an emptied file is still marked');
+  assert.deepEqual(
+    removalRanges(terminated, [{ line: 0, text: [], atEnd: false, replaced: false }]),
+    { above: [], below: [], badges: [] },
+    'a hunk that removed nothing is not a removal'
+  );
+
+  // --- What the mark cannot say: the lines themselves -----------------------
+  // The hover is the answer to the question the mark provokes, so it has to
+  // carry the removed text verbatim, in the document's own language, and a way
+  // through to the rest when there is more of it than a popup should hold.
+  const showAll = vscode.Uri.parse('command:copyworkcode.peekRemoved?%5B0%5D');
+  const hoverOf = (text: string[]) =>
+    removalHover(terminated, { line: 1, text, atEnd: false, replaced: false }, showAll);
+  const shortHover = hoverOf(['first gone', 'second gone']);
+  assert.equal(shortHover?.range?.start.line, 1, 'the hover covers the marked line');
+  const short = (shortHover!.contents[0] as vscode.MarkdownString).value;
+  assert.ok(
+    short.includes(['```plaintext', 'first gone', 'second gone', '```'].join('\n')),
+    'the removed lines arrive as code in the language of the file that lost them'
+  );
+  assert.ok(short.includes('2 lines deleted'), 'headed by the count the badge shows');
+  assert.ok(
+    short.includes('command:copyworkcode.peekRemoved'),
+    'and carries the link to the whole removal'
+  );
+
+  const long = (hoverOf(gone.concat(Array.from({ length: 11 }, (_, i) => `more ${i}`)))!
+    .contents[0] as vscode.MarkdownString).value;
+  assert.ok(long.includes('was line 8'), 'a long removal shows what fits');
+  assert.ok(!long.includes('more 4'), 'and stops rather than swallowing the file');
+  assert.ok(long.includes('8 more not shown'), 'saying how much is left behind the link');
+  assert.equal(hoverOf([]), undefined, 'nothing removed, nothing to hover');
+
+  // End to end: the provider is registered, and answers on the line a live
+  // review marked — the half of this that no direct call can prove.
+  const deleted = await review('deleted.ts');
+  const marks = await hoverAt(deleted, 1);
+  assert.ok(
+    marks.includes('first gone') && marks.includes('second gone'),
+    'hovering the line a removal was marked at shows what was removed there'
+  );
+
+  // And what the hover's link opens: the removed lines as a document of their
+  // own, named after the review and the section that lost them. 'keep' is five
+  // characters, so that section starts at offset five; which review of the run
+  // this is does not matter, only that exactly one of them owns the text.
+  const named = await Promise.all(
+    Array.from({ length: 40 }, (_, id) =>
+      vscode.workspace
+        .openTextDocument(removedUri(deleted.uri.fsPath, id, 5, 2))
+        .then((document) => document.getText())
+    )
+  );
+  const removedText = ['first gone', 'second gone', ''].join('\n');
+  assert.equal(
+    named.filter((text) => text === removedText).length,
+    1,
+    'one review owns the removed lines, and the panel document holds them whole'
+  );
+  assert.ok(
+    named.every((text) => text === removedText || text === ''),
+    'every other name resolves to nothing — these documents are cached by URI'
+  );
+
+  // And the command the link carries. The panel it opens is UI no suite can
+  // read, but a wrong command name or argument shape fails here rather than
+  // silently doing nothing under the reviewer's click.
+  await exec('copyworkcode.peekRemoved', 5);
+  await settle();
+
+  // --- The mark is debt, not history ----------------------------------------
+  // Claiming a section takes its mark with it. Decorations cannot be read back,
+  // but the hover is painted from the same list, so it answers for exactly the
+  // removals that are still marked: it going quiet is the mark going with it.
+  // The review is still live throughout — the file has a second section, and
+  // the cursor moving onto it is what says so.
+  const cleared = await review('cleared.ts');
+  assert.ok(
+    (await hoverAt(cleared, 1)).includes('gone'),
+    'the removal is marked while its section is owed'
+  );
+  await exec('copyworkcode.confirmSection');
+  await settle();
+  assert.equal(
+    cleared.offsetAt(editorOf('cleared.ts').selection.active),
+    6,
+    'confirming moves on to the section still owed, so the review is still live'
+  );
+  assert.ok(
+    // Not emptiness: the language service answers for this line too, and what
+    // it has to say about the code that survived is none of the review's
+    // business either way.
+    !(await hoverAt(cleared, 1)).includes('gone'),
+    'and the claimed section no longer marks what it removed'
+  );
+  await exec('copyworkcode.abortReview');
+  await settle();
 
   // --- Clicking back into text already typed --------------------------------
   // A click anywhere in a section is someone pointing at the section, not at an

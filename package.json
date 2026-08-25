@@ -82,6 +82,11 @@
         "category": "CopyWorkCode"
       },
       {
+        "command": "copyworkcode.peekRemoved",
+        "title": "Show Removed Lines",
+        "category": "CopyWorkCode"
+      },
+      {
         "command": "copyworkcode.abortReview",
         "title": "Stop Review",
         "category": "CopyWorkCode",
@@ -284,6 +289,10 @@
         },
         {
           "command": "copyworkcode.focusSection",
+          "when": "false"
+        },
+        {
+          "command": "copyworkcode.peekRemoved",
           "when": "false"
         },
         {

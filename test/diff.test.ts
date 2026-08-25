@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { diffLines, hasDebt, normalizeEol } from '../src/core/diff';
+import { countLines, diffLines, hasDebt, normalizeEol } from '../src/core/diff';
 
 test('identical texts produce no hunks', () => {
   assert.deepEqual(diffLines('a\nb\nc\n', 'a\nb\nc\n'), []);
@@ -79,4 +79,18 @@ test('repeated lines resolve to a minimal change', () => {
 
 test('normalizeEol only touches CRLF', () => {
   assert.equal(normalizeEol('a\r\nb\rc\n'), 'a\nb\rc\n');
+});
+
+test('countLines agrees with the line numbers hunks use', () => {
+  assert.equal(countLines(''), 0);
+  assert.equal(countLines('a'), 1);
+  // The trailing newline closes the last line, it does not open another.
+  assert.equal(countLines('a\n'), 1);
+  assert.equal(countLines('a\nb\n'), 2);
+  assert.equal(countLines('a\n\nb\n'), 3);
+  assert.equal(countLines('a\r\nb\r\n'), 2);
+  // A deletion that ran off the end reports the line just past the last one,
+  // which is what makes this count the only safe thing to compare it against.
+  const [hunk] = diffLines('keep\ngone\n', 'keep\n');
+  assert.equal(hunk.currentStart, countLines('keep\n'));
 });

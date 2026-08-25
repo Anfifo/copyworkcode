@@ -22,6 +22,21 @@ export function normalizeEol(text: string): string {
   return text.replace(/\r\n/g, '\n');
 }
 
+/**
+ * How many lines the diff considers `text` to have. A trailing newline does not
+ * open a line, so for a file that ends the way most files do this is one less
+ * than an editor's own line count — and a hunk line number can only be compared
+ * against this, never against the editor's.
+ */
+export function countLines(text: string): number {
+  if (text === '') return 0;
+  let lines = 1;
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '\n' && i + 1 < text.length) lines++;
+  }
+  return lines;
+}
+
 /** True when the two texts differ by more than line endings. */
 export function hasDebt(baseline: string, current: string): boolean {
   return normalizeEol(baseline) !== normalizeEol(current);
