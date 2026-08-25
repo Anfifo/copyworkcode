@@ -404,7 +404,10 @@ there is nowhere useful to move right, since everything to the right is text sti
 the key spends itself on the word ahead — pending whitespace plus a run of identifier
 characters, or a run of adjacent symbols so `=>` and `);` go in one press. Tab does the same
 thing, which loses no indentation case: the word fill already consumes the whitespace before
-the word, and indentation never has to be typed anyway (see the matching rules). Away from
+the word, and indentation never has to be typed anyway (see the matching rules). Moving to
+the next line is a fill of its own: where the pending whitespace crosses a line break the
+gesture stops there rather than carrying on into the first word of a line the reviewer has
+not read yet. Away from
 the matching position both keys are an arrow key and a tab again, so a fill can never happen
 where the reviewer isn't looking.
 
@@ -447,6 +450,13 @@ Typing in a real buffer means the editor itself modifies text the user didn't ty
   Typing the next visible character while whitespace is pending applies the run too, so
   indentation never has to be typed. Line endings and auto-indent artifacts can never cause a
   mismatch.
+- **One gesture crosses one line break.** Snapping stops after the first newline and the
+  indentation behind it, so a blank line costs two keystrokes — exactly what the text costs in
+  an ordinary editor. Unbounded, the rule swallowed whole paragraph breaks: one Tab at the end
+  of a line could apply two newlines, the next line's indent *and* its first word, landing the
+  reviewer somewhere they had not looked yet. A flow whose whole point is that the change goes
+  past you one piece at a time cannot have a key that skips pieces. A break is `\r?\n`,
+  so a CRLF target is never split down the middle.
 - **Trailing whitespace is absorbed.** When only whitespace remains in a section, the last
   accepted keystroke completes it — otherwise every section would end on an invisible pending
   newline the user has to guess at.

@@ -7,9 +7,15 @@
  * - Code is typed character-for-character; multi-character input (paste,
  *   completions) is rejected.
  * - Whitespace snaps to the target: any whitespace keystroke applies the
- *   target's whitespace run, whatever it is. Typing the next visible
- *   character while whitespace is pending also applies the run first, so
+ *   target's pending whitespace, whatever it is. Typing the next visible
+ *   character while whitespace is pending also applies it first, so
  *   indentation and line breaks can never cause a mismatch.
+ * - One gesture crosses at most one line break. Whitespace snapping stops
+ *   after the first newline and the indentation behind it, so a blank line
+ *   costs a second keystroke — the same two the text would cost in an
+ *   ordinary editor. Without the cap a single key could carry the reviewer
+ *   over a paragraph break, which is a jump they didn't ask for in a flow
+ *   whose whole point is that the change goes past them one piece at a time.
  */
 
 export type InputResult =
@@ -105,21 +111,30 @@ export class RetypeEngine {
    * A "word" is a run of identifier characters, or a run of adjacent symbols
    * when the next character isn't one (`=>` and `);` fill in one go), so the
    * gesture always lands on a boundary the reader recognizes.
+   *
+   * Moving to the next line is a word's worth of gesture on its own: when the
+   * pending whitespace crosses a line break the fill stops there rather than
+   * carrying on into the first word of the new line, which would land the
+   * reviewer somewhere they hadn't looked yet.
    */
   fillWord(): string {
     if (this.done) {
       return '';
     }
-    const rest = this.remaining;
-    const leading = /^\s*/.exec(rest)![0].length;
-    let end = leading;
+    const snap = this.whitespaceRunAhead();
+    if (/[\r\n]/.test(snap)) {
+      this.pos += snap.length;
+      return this.absorbTrailingWhitespace(snap);
+    }
+    const rest = this.target.slice(this.pos + snap.length);
+    let end = 0;
     if (isWordChar(rest[end])) {
       while (end < rest.length && isWordChar(rest[end])) end++;
     } else {
       while (end < rest.length && isSymbol(rest[end])) end++;
     }
-    this.pos += end;
-    return this.absorbTrailingWhitespace(rest.slice(0, end));
+    this.pos += snap.length + end;
+    return this.absorbTrailingWhitespace(snap + rest.slice(0, end));
   }
 
   /** Everything still untyped — used when a section is skipped. */
@@ -129,12 +144,38 @@ export class RetypeEngine {
     return text;
   }
 
+  /**
+   * The whitespace one gesture may apply: everything up to the next line
+   * break, that break, and the indentation of the line it opens — and then
+   * nothing more, so a run spanning a blank line is handed over one line at a
+   * time. A break is `\r?\n` so a CRLF target is never split down the middle.
+   */
   private whitespaceRunAhead(): string {
-    let end = this.pos;
-    while (end < this.target.length && /\s/.test(this.target[end])) {
+    let end = this.spaceEnd(this.pos);
+    const width = this.breakAt(end);
+    if (width === 0) {
+      return this.target.slice(this.pos, end);
+    }
+    return this.target.slice(this.pos, this.spaceEnd(end + width));
+  }
+
+  /** Past the whitespace at `from`, stopping at the first line break. */
+  private spaceEnd(from: number): number {
+    let end = from;
+    while (
+      end < this.target.length &&
+      /\s/.test(this.target[end]) &&
+      this.breakAt(end) === 0
+    ) {
       end++;
     }
-    return this.target.slice(this.pos, end);
+    return end;
+  }
+
+  /** Characters of the line break at `at`, or 0 if there isn't one. */
+  private breakAt(at: number): number {
+    if (this.target[at] === '\n') return 1;
+    return this.target[at] === '\r' && this.target[at + 1] === '\n' ? 2 : 0;
   }
 }
 

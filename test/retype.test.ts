@@ -132,11 +132,52 @@ test('fillWord takes the pending whitespace and the next word', () => {
   assert.equal(engine.fillWord(), '');
 });
 
-test('fillWord snaps indentation like a whitespace keystroke does', () => {
+test('fillWord stops at a line break instead of filling the word past it', () => {
   const engine = new RetypeEngine('a\n  bc d');
   engine.handleInput('a');
-  assert.equal(engine.fillWord(), '\n  bc');
+  // The break and the indentation behind it are the whole gesture: crossing a
+  // line and typing its first word are two moves, not one.
+  assert.equal(engine.fillWord(), '\n  ');
+  assert.equal(engine.fillWord(), 'bc');
   assert.equal(engine.fillWord(), ' d');
+  assert.equal(engine.done, true);
+});
+
+test('fillWord hands over a blank line one break at a time', () => {
+  const engine = new RetypeEngine('a;\n\nfn()');
+  engine.handleInput('a');
+  assert.equal(engine.fillWord(), ';');
+  assert.equal(engine.fillWord(), '\n', 'to the blank line');
+  assert.equal(engine.fillWord(), '\n', 'and only then off it');
+  assert.equal(engine.fillWord(), 'fn');
+});
+
+test('a whitespace keystroke crosses one line break, not a blank line', () => {
+  const engine = new RetypeEngine('a\n\n  b');
+  engine.handleInput('a');
+  assert.deepEqual(engine.handleInput('\n'), { kind: 'insert', text: '\n' });
+  assert.deepEqual(engine.handleInput('\n'), { kind: 'insert', text: '\n  ' });
+  assert.deepEqual(engine.handleInput('b'), { kind: 'insert', text: 'b' });
+  assert.equal(engine.done, true);
+});
+
+test('a visible character applies at most one pending line break', () => {
+  const engine = new RetypeEngine('a\n\nb');
+  engine.handleInput('a');
+  // Typing 'b' cannot reach it: only the first break and its indentation are
+  // pending, and what follows them is another break rather than 'b'.
+  assert.deepEqual(engine.handleInput('b'), { kind: 'reject' });
+  assert.deepEqual(engine.handleInput('\n'), { kind: 'insert', text: '\n' });
+  assert.deepEqual(engine.handleInput('b'), { kind: 'insert', text: '\nb' });
+  assert.equal(engine.done, true);
+});
+
+test('a CRLF break is never split down the middle', () => {
+  const engine = new RetypeEngine('a\r\n\r\n  b');
+  engine.handleInput('a');
+  assert.deepEqual(engine.handleInput('\n'), { kind: 'insert', text: '\r\n' });
+  assert.deepEqual(engine.handleInput('\n'), { kind: 'insert', text: '\r\n  ' });
+  assert.deepEqual(engine.handleInput('b'), { kind: 'insert', text: 'b' });
   assert.equal(engine.done, true);
 });
 
