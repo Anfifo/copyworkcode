@@ -37,19 +37,15 @@ promoted here when they're deemed worth building.
       to read it against. Whether three lines of context either side is enough to place a
       change, or whether the gaps get opened every time. And whether typing on a page that
       scrolls as one document keeps the caret where the eye is, since the page follows the
-      caret rather than the other way round.
+      caret rather than the other way round. Lastly, now that the queue answers for the page
+      too, whether `on the page 3/9` earns its width in a narrow row, or whether the surface
+      a file is being read on is obvious enough without the row saying it.
 - [ ] **Writing your own code on the change set page** — the page types the change as written
       and nothing else. The editor review's Ctrl+E, where the reviewer takes a region over and
       writes their own version, has no equivalent there: the page applies no edit anywhere, so
       a rewrite needs a write path of its own (one workspace edit per region as it is claimed),
       an `edited` outcome carried through the same as the editor's, and an answer for what a
       rewritten region does to the snapshot of the file the rest of the page is drawn from.
-- [ ] **The queue says nothing about page progress** — a file the change set page is part way
-      through shows no coverage and no tint on its row, because the queue asks the editor
-      review for progress and only it can answer. The asymmetry is sharper now that the editor
-      side answers for paused reviews too, so a row reads "paused 3/9" for one surface and
-      nothing at all for the other. Either both surfaces answer, or the row says which surface
-      owns the file.
 - [ ] **Per-project override for content exclusion** — the exclusion patterns are fixed;
       a project keeping secrets under a name the list doesn't cover has no way to add it,
       and no way to reclaim a source file the list catches by mistake.

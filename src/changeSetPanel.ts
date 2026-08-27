@@ -8,6 +8,7 @@ import {
   ChangeSetReview,
   FinishedFile,
   Outbound,
+  PageProgress,
   RegionGesture,
   ReviewFile,
 } from './core/changeSetReview';
@@ -75,7 +76,8 @@ export class ChangeSetPanel implements vscode.Disposable {
   private panel?: vscode.WebviewPanel;
   private review = new ChangeSetReview();
   private emitter = new vscode.EventEmitter<void>();
-  /** Fires when a file's review completed here, so the queue can be re-read. */
+  /** Fires when the queue's reading of this page changed: a file completed
+   * here, a region closed, or the page went away with progress on it. */
   readonly onDidFinish = this.emitter.event;
   /** Gestures run one at a time: each can end with file I/O and an await, and
    * two keystrokes overtaking each other would claim a region twice. */
@@ -114,8 +116,21 @@ export class ChangeSetPanel implements vscode.Disposable {
     panel.webview.onDidReceiveMessage((message) => this.receive(message));
     panel.onDidDispose(() => {
       this.panel = undefined;
+      const held = this.review.reported;
       this.review.clear();
+      // Rows reading "on the page N/M" have nothing behind them once the page
+      // is closed, and a row still saying so would point at a surface that is
+      // not there any more.
+      if (held) this.emitter.fire();
     });
+  }
+
+  /**
+   * Coverage of this file here, for the queue row. Nothing once the page is
+   * closed, which clears the review with it.
+   */
+  progressFor(file: string): PageProgress | undefined {
+    return this.review.progressFor(file);
   }
 
   /**
@@ -142,6 +157,9 @@ export class ChangeSetPanel implements vscode.Disposable {
    * through typing.
    */
   private build(): void {
+    // Rebuilding is a fresh read, so whatever the rows were saying about this
+    // page goes with it.
+    const held = this.review.reported;
     const files: ReviewFile[] = [];
     for (const row of this.source.rows()) {
       const baseline = this.source.baselineFor(row.file);
@@ -162,6 +180,7 @@ export class ChangeSetPanel implements vscode.Disposable {
       });
     }
     this.review.load(files);
+    if (held) this.emitter.fire();
   }
 
   // --- gestures ---------------------------------------------------------------
@@ -213,6 +232,7 @@ export class ChangeSetPanel implements vscode.Disposable {
    * that ends a review running in an editor.
    */
   private async gesture(message: RegionGesture): Promise<void> {
+    const before = this.review.progressFor(message.file);
     const resolution = this.review.resolve(message);
     if (resolution.kind === 'ignore') return;
     if (resolution.kind === 'reject') {
@@ -232,7 +252,17 @@ export class ChangeSetPanel implements vscode.Disposable {
     const commit = this.review.commit(resolution);
     if (!commit) return;
     this.send(commit.posts);
-    if (commit.finished) this.finish(commit.finished);
+    if (commit.finished) {
+      this.finish(commit.finished);
+      return;
+    }
+    // The row prints claimed-of-total, so it is redrawn when that moves and not
+    // on every keystroke: re-reading the queue diffs every file in it. The first
+    // gesture on a file counts as a move too — it is what puts the row's reading
+    // there at all.
+    if (before?.claimed !== this.review.progressFor(message.file)?.claimed) {
+      this.emitter.fire();
+    }
   }
 
   /**

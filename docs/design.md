@@ -571,14 +571,40 @@ Starting a review fires its own event, separate from the one that fires when a r
 queue has to redraw so the row picks up its tint and its `reviewing N/M` coverage, but no
 baseline moved, so nothing that depends on baselines should be invalidated with it.
 
+**A row names the surface holding it.** Coverage can come from either review surface, and the
+row says which: `reviewing 3/9` for the editor review running now, `paused 3/9` for one the
+reviewer stepped away from, `on the page 3/9` for the change set page. One vocabulary for all
+three would be shorter and would be a lie of the expensive kind — it would send a reviewer to
+the editor for a file the page holds, where they would find nothing and start a fresh review
+over the top of the progress they were looking for. The tint does not follow the page. It marks
+where the reviewer is *in the queue*, and the page is not somewhere the queue can point them:
+it is already open in front of them with its own progress on every file at once.
+
+Each surface reports coverage in its own terms and neither knows about the other; naming the one
+to go back to is the row's business, so the two answers are merged where the surfaces are wired
+together rather than inside either of them. The editor answers first, and not only for tidiness:
+starting a review there takes the file off the page, so a file both could claim is the editor's
+by the time the row asks. The page reports a file only once a gesture has made it that file's
+surface — every file in the change set is *on* the page, and reporting all of them would put a
+reading on every row that says nothing but "the page is open" — and it stops reporting one that
+finished there, whose baseline moved when it closed: debt standing against that file again is a
+new change the page has not read, and `9/9` would be a lie about it.
+
+Page coverage is redrawn when a region closes rather than on every keystroke, since re-reading
+the queue diffs every file in it. The first gesture on a file counts as a move too, because it
+is what puts the row's reading there at all, and the page closing counts as one in the other
+direction.
+
 The hover carries the long form — path, counts against whatever the
 current baseline is, live coverage, agent edits, when it was last reviewed and how — the
 container badge carries the pending count, and one inline button marks a file reviewed without
 typing it. Alt+N moves to the next file in the queue, and finishing a review offers the same
 move.
 
-**Reset current review** is the row's other action, and only the row under review has it: a
-file whose review hasn't started has no progress to clear. It puts every section back to
+**Reset current review** is the row's other action, and only a row with an editor review on it
+— running or paused — has it: a file whose review hasn't started has no progress to clear, and a
+file the page holds has no reset to run, since resetting puts the buffer back to the version
+handed over for review and the page edits no buffer. It puts every section back to
 unreviewed *and* the file back to the version that was handed over for review. Both halves are
 needed for the gesture to mean anything. Typing writes nothing to the buffer, so clearing the
 positions alone would leave the reviewer's own rewrites in the file and immediately re-derive

@@ -2,8 +2,21 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { DebtRow, DebtSource } from './debtSource';
 import { EventQueue } from './eventQueue';
-import { ReviewProgress } from './retypeController';
 import { ReviewLog } from './reviewState';
+
+/**
+ * What a row says about a file someone is part way through — in the queue's own
+ * vocabulary, not either surface's. Both surfaces report coverage the same way;
+ * only the row has to name which one to go back to, since a reviewer sent to the
+ * editor for a file the page holds would find nothing there and start again.
+ */
+export interface RowProgress {
+  claimed: number;
+  total: number;
+  /** `reviewing` — the editor review running now. `paused` — an editor review
+   * the reviewer stepped away from. `page` — the change set page. */
+  state: 'reviewing' | 'paused' | 'page';
+}
 
 /**
  * The review queue: one row per file whose content differs from what it is
@@ -30,7 +43,7 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
     private source: DebtSource,
     private queue: EventQueue,
     private log: ReviewLog,
-    private progressFor: (file: string) => ReviewProgress | undefined,
+    private progressFor: (file: string) => RowProgress | undefined,
     private decorations?: DebtDecorations
   ) {}
 
@@ -66,11 +79,9 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
 
     const bits = [`+${added} −${removed}`];
     if (progress) {
-      bits.push(
-        `${progress.paused ? 'paused' : 'reviewing'} ${progress.claimed}/${
-          progress.total
-        }`
-      );
+      // Two of the three states are already the word the row wants.
+      const where = progress.state === 'page' ? 'on the page' : progress.state;
+      bits.push(`${where} ${progress.claimed}/${progress.total}`);
     }
     if (events > 0) {
       bits.push(`${events} edit(s)`);
@@ -79,12 +90,15 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
     item.description = bits.join(' · ');
 
     item.tooltip = this.tooltip(file, added, removed, events, progress, row);
-    // A row with a review on it, running or paused, answers to one action the
-    // others cannot: there is no progress to reset on a file whose review
-    // hasn't started.
-    item.contextValue = progress
-      ? 'copyworkcode.file.reviewing'
-      : 'copyworkcode.file';
+    // A row with an editor review on it, running or paused, answers to one
+    // action the others cannot: there is no progress to reset on a file whose
+    // review hasn't started. Reset belongs to that surface — it puts the file
+    // back to the version handed over for review — so a row the page holds is
+    // not offered it.
+    item.contextValue =
+      progress && progress.state !== 'page'
+        ? 'copyworkcode.file.reviewing'
+        : 'copyworkcode.file';
     item.command = {
       command: 'copyworkcode.reviewFile',
       title: 'Review by Retyping',
@@ -98,7 +112,7 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
     added: number,
     removed: number,
     events: number,
-    progress: ReviewProgress | undefined,
+    progress: RowProgress | undefined,
     row: DebtRow | undefined
   ): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
@@ -111,11 +125,16 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
       lines.push('New file — the whole file is one section.');
     }
     if (progress) {
+      // Each surface keeps its own word for a unit of review: the editor walks
+      // sections of a buffer, the page draws regions of a document.
       lines.push(
-        progress.paused
-          ? `Review paused: ${progress.claimed} of ${progress.total} section(s) ` +
-            'claimed, waiting where you left it.'
-          : `Under review now: ${progress.claimed} of ${progress.total} section(s) claimed.`
+        progress.state === 'reviewing'
+          ? `Under review now: ${progress.claimed} of ${progress.total} section(s) claimed.`
+          : progress.state === 'paused'
+            ? `Review paused: ${progress.claimed} of ${progress.total} section(s) ` +
+              'claimed, waiting where you left it.'
+            : `On the change set page: ${progress.claimed} of ${progress.total} ` +
+              'region(s) claimed.'
       );
     }
     if (events > 0) {
@@ -144,10 +163,12 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
 }
 
 /**
- * Tints the filename of the file being reviewed right now, and nothing else.
- * A review the reviewer stepped away from is not that file: its row says how far
- * it got in words, and the one hue the panel has stays on the question of where
- * the reviewer actually is.
+ * Tints the filename of the file being reviewed in an editor right now, and
+ * nothing else. A review the reviewer stepped away from is not that file, and
+ * neither is one the change set page holds: both say how far they got in words,
+ * and the one hue the panel has stays on the question of where the reviewer
+ * actually is. The page is not somewhere the queue can point them anyway — it is
+ * already open in front of them, showing its own progress on every file at once.
  *
  * An earlier version coloured every queued row by the shape of its change —
  * green for additions, red for deletions, blue for both — which put the panel's

@@ -112,6 +112,12 @@ export interface Commit {
   finished?: FinishedFile;
 }
 
+/** Coverage of one file on the page, in the page's own terms. */
+export interface PageProgress {
+  claimed: number;
+  total: number;
+}
+
 export class ChangeSetReview {
   private files = new Map<string, ReviewFile>();
   /** Files the page took over, so whatever had one is only told once. */
@@ -143,6 +149,31 @@ export class ChangeSetReview {
   /** True once a gesture has landed on this file, making the page its surface. */
   owns(file: string): boolean {
     return this.taken.has(file);
+  }
+
+  /**
+   * How far this file has got here, for the queue row. Undefined until a gesture
+   * makes the page this file's surface: a file the page merely holds is every
+   * file in the change set, which says nothing about where the reviewer is.
+   */
+  progressFor(file: string): PageProgress | undefined {
+    const live = this.files.get(file);
+    if (!live || !this.taken.has(file)) return undefined;
+    const claimed = live.states.filter((state) => state.outcome !== undefined).length;
+    // A file finished here is a review that happened, not one in progress: its
+    // baseline moved when it closed, so debt standing against it again is a new
+    // change this page has not read.
+    if (claimed === live.states.length) return undefined;
+    return { claimed, total: live.states.length };
+  }
+
+  /** Whether any file here has a reading the queue is showing, so a caller can
+   * tell whether discarding this review is something the rows have to hear. */
+  get reported(): boolean {
+    for (const file of this.taken) {
+      if (this.progressFor(file) !== undefined) return true;
+    }
+    return false;
   }
 
   /** The whole document, as the page is sent it. */

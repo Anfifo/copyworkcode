@@ -6,7 +6,7 @@ import { EventQueue } from './eventQueue';
 import { ReviewLog } from './reviewState';
 import { ChangeSetPanel } from './changeSetPanel';
 import { DebtMode, DebtSource } from './debtSource';
-import { DebtDecorations, DebtTreeProvider } from './debtView';
+import { DebtDecorations, DebtTreeProvider, RowProgress } from './debtView';
 import { RetypeController, BASELINE_SCHEME, REMOVED_SCHEME } from './retypeController';
 import { syncCaptureHook } from './hookInstaller';
 import { matchesAny } from './core/glob';
@@ -197,6 +197,29 @@ async function setDebtMode(mode: DebtMode): Promise<void> {
   await source.setMode(mode);
 }
 
+/**
+ * What the queue row says about a file, from whichever surface holds it. The
+ * editor review answers first, and not only for tidiness: starting one there
+ * takes the file off the page, so a file both could claim is the editor's by
+ * the time this is asked.
+ *
+ * Each surface reports coverage in its own terms and neither knows about the
+ * other; naming the one to go back to is the row's business, and so it is done
+ * here rather than in either of them.
+ */
+function rowProgress(file: string): RowProgress | undefined {
+  const editor = retype?.progressFor(file);
+  if (editor) {
+    return {
+      claimed: editor.claimed,
+      total: editor.total,
+      state: editor.paused ? 'paused' : 'reviewing',
+    };
+  }
+  const page = changeSet?.progressFor(file);
+  return page ? { claimed: page.claimed, total: page.total, state: 'page' } : undefined;
+}
+
 function startTracking(root: string, context: vscode.ExtensionContext): void {
   if (queue) return; // already tracking this window
   void vscode.commands.executeCommand('setContext', 'copyworkcode.enabled', true);
@@ -216,14 +239,7 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
   const decorations = new DebtDecorations(
     (file) => retype?.progressFor(file)?.paused === false
   );
-  tree = new DebtTreeProvider(
-    root,
-    source,
-    queue,
-    log,
-    (file) => retype?.progressFor(file),
-    decorations
-  );
+  tree = new DebtTreeProvider(root, source, queue, log, rowProgress, decorations);
   const view = vscode.window.createTreeView('copyworkcode.debt', {
     treeDataProvider: tree,
   });
@@ -245,6 +261,8 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
     log.onDidChange(() => tree?.refresh()),
     source.onDidChangeMode(() => tree?.refresh()),
     retype.onDidFinish(() => tree?.refresh()),
+    // The page's own coverage is on its rows now, so this carries a region
+    // closing there as well as a file finishing.
     changeSet.onDidFinish(() => tree?.refresh()),
     // Starting or resuming a review moves no baseline, but the row it belongs to
     // has to pick up its tint and its "reviewing N/M" description, and whichever

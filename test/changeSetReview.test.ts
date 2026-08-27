@@ -398,3 +398,81 @@ test('loading a fresh document drops what the page owned', () => {
   assert.equal(review.owns('/w/a.ts'), false);
   assert.deepEqual(stateOf(review, '/w/a.ts'), { position: 0, touched: false });
 });
+
+test('the queue is told nothing about a file the page has only drawn', () => {
+  const review = reviewOf(oneChange());
+
+  // Every file in the change set is on the page. Reporting all of them would
+  // put a reading on every row in the queue that says only "the page is open".
+  assert.equal(review.progressFor('/w/a.ts'), undefined);
+  assert.equal(review.owns('/w/a.ts'), false);
+});
+
+test('coverage is reported from the first gesture that takes a file over', () => {
+  const baseline = file(30);
+  const current = baseline
+    .replace('line 10', 'changed 10')
+    .replace('line 25', 'changed 25');
+  const review = reviewOf(loaded('/w/a.ts', baseline, current));
+
+  // One character in: nothing is claimed yet, but the page is this file's
+  // surface now and the row has something true to say about where it is.
+  play(review, { type: 'type', file: '/w/a.ts', index: 0, text: 'c' });
+  assert.deepEqual(review.progressFor('/w/a.ts'), { claimed: 0, total: 2 });
+
+  play(review, { type: 'skip', file: '/w/a.ts', index: 0 });
+  assert.deepEqual(review.progressFor('/w/a.ts'), { claimed: 1, total: 2 });
+});
+
+test('a file finished on the page stops reporting progress', () => {
+  const baseline = file(30);
+  const current = baseline
+    .replace('line 10', 'changed 10')
+    .replace('line 25', 'changed 25');
+  const review = reviewOf(loaded('/w/a.ts', baseline, current));
+
+  play(review, { type: 'skip', file: '/w/a.ts', index: 0 });
+  play(review, { type: 'skip', file: '/w/a.ts', index: 1 });
+
+  // Its baseline moved when it closed, so the row left the queue. Debt standing
+  // against the file again is a new change this page has not read, and "9/9" is
+  // the one answer that would be a lie about it.
+  assert.equal(review.progressFor('/w/a.ts'), undefined);
+});
+
+test('a file given up to an editor stops reporting progress', () => {
+  const baseline = file(30);
+  const current = baseline
+    .replace('line 10', 'changed 10')
+    .replace('line 25', 'changed 25');
+  const review = reviewOf(loaded('/w/a.ts', baseline, current));
+
+  play(review, { type: 'skip', file: '/w/a.ts', index: 0 });
+  assert.deepEqual(review.progressFor('/w/a.ts'), { claimed: 1, total: 2 });
+
+  review.dropFile('/w/a.ts');
+  assert.equal(review.progressFor('/w/a.ts'), undefined);
+});
+
+test('a page that has been cleared reports nothing for anything', () => {
+  const review = reviewOf(oneChange());
+  play(review, { type: 'type', file: '/w/a.ts', index: 0, text: 'c' });
+  assert.deepEqual(review.progressFor('/w/a.ts'), { claimed: 0, total: 1 });
+
+  review.clear();
+  assert.equal(review.progressFor('/w/a.ts'), undefined);
+  assert.equal(review.progressFor('/w/never-seen.ts'), undefined);
+});
+
+test('the page knows whether any row is reading from it', () => {
+  const review = reviewOf(oneChange());
+  assert.equal(review.reported, false, 'a page nothing has touched is on no row');
+
+  play(review, { type: 'type', file: '/w/a.ts', index: 0, text: 'c' });
+  assert.equal(review.reported, true);
+
+  // Finishing takes the file off the queue with it, so there is nothing left
+  // for a row to read even though the page still holds the file.
+  typeAll(review, '/w/a.ts', 0, 'hanged 10');
+  assert.equal(review.reported, false);
+});
