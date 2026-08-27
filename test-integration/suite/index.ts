@@ -844,6 +844,75 @@ export async function run(): Promise<void> {
   await exec('copyworkcode.abortReview');
   await settle();
 
+  // --- Moving to another file parks a review instead of ending it -----------
+  // The reviewer who opens a second file has not abandoned the first one, so its
+  // sections and their positions wait for them. What the parked file must *not*
+  // keep is the review's hold on it: nothing is guiding it, so it has to be an
+  // ordinary writable editor — and an edit landing in it while it waits moves
+  // the parked review's own progress, exactly as it would a live one's.
+  const held = await review('parked.ts');
+  await typeAll('pa');
+  const caretHeld = () => held.offsetAt(editorOf('parked.ts').selection.active);
+  assert.equal(caretHeld(), 6, 'two characters typed, caret two characters in');
+
+  const other = await review('other.ts');
+  await type('o');
+  assert.equal(
+    other.offsetAt(editorOf('other.ts').selection.active),
+    5,
+    'the file opened second is the live review'
+  );
+
+  await vscode.window.showTextDocument(held, { preview: false });
+  await settle(150);
+  await clickAt('parked.ts', 6);
+  await exec('default:type', { text: '!' });
+  await settle();
+  assert.equal(
+    held.getText(),
+    'pa1\npa!2\npa3\n',
+    'the parked file is writable again — its review holds nothing'
+  );
+
+  await review('parked.ts');
+  assert.equal(
+    caretHeld(),
+    7,
+    'coming back lands where the parked review left off, past what was written in'
+  );
+  await type('2');
+  assert.equal(caretHeld(), 8, 'and the next key is matched against what is still owed');
+  await exec('copyworkcode.typeEnter');
+  await settle(150);
+  await typeAll('pa3');
+  await exec('copyworkcode.typeEnter');
+  await settle();
+  assert.equal(
+    baselineOf('parked.ts'),
+    'pa1\npa!2\npa3\n',
+    'the resumed review finished against the content it was actually reading'
+  );
+  assert.equal(reviews().length, 22, 'a resumed review records one review, not two');
+  // Typed, not written in: a character that arrived while the review was parked
+  // is not the reviewer taking the section over. Nothing was guiding the file
+  // then, so that edit is indistinguishable from a formatter's or an agent's —
+  // and the section it landed in still had to be typed out afterwards.
+  assert.equal(reviews()[21].outcome, 'typed');
+  assert.equal(reviews()[21].hunksTyped, 1);
+  assert.equal(reviews()[21].hunksEdited, 0);
+
+  // Finishing one file does not disturb the other one waiting: parking is per
+  // file, and the review left behind is still exactly where it was.
+  await review('other.ts');
+  assert.equal(
+    other.offsetAt(editorOf('other.ts').selection.active),
+    5,
+    'the second parked review survived the first one finishing'
+  );
+
+  await exec('copyworkcode.abortReview');
+  await settle();
+
   await exec('copyworkcode.abortReview');
   await settle();
 

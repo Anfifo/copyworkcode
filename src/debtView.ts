@@ -66,7 +66,11 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
 
     const bits = [`+${added} −${removed}`];
     if (progress) {
-      bits.push(`reviewing ${progress.claimed}/${progress.total}`);
+      bits.push(
+        `${progress.paused ? 'paused' : 'reviewing'} ${progress.claimed}/${
+          progress.total
+        }`
+      );
     }
     if (events > 0) {
       bits.push(`${events} edit(s)`);
@@ -75,8 +79,9 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
     item.description = bits.join(' · ');
 
     item.tooltip = this.tooltip(file, added, removed, events, progress, row);
-    // The row under review answers to one action the others cannot: there is
-    // no progress to reset on a file whose review hasn't started.
+    // A row with a review on it, running or paused, answers to one action the
+    // others cannot: there is no progress to reset on a file whose review
+    // hasn't started.
     item.contextValue = progress
       ? 'copyworkcode.file.reviewing'
       : 'copyworkcode.file';
@@ -107,7 +112,10 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
     }
     if (progress) {
       lines.push(
-        `Under review now: ${progress.claimed} of ${progress.total} section(s) claimed.`
+        progress.paused
+          ? `Review paused: ${progress.claimed} of ${progress.total} section(s) ` +
+            'claimed, waiting where you left it.'
+          : `Under review now: ${progress.claimed} of ${progress.total} section(s) claimed.`
       );
     }
     if (events > 0) {
@@ -137,6 +145,9 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
 
 /**
  * Tints the filename of the file being reviewed right now, and nothing else.
+ * A review the reviewer stepped away from is not that file: its row says how far
+ * it got in words, and the one hue the panel has stays on the question of where
+ * the reviewer actually is.
  *
  * An earlier version coloured every queued row by the shape of its change —
  * green for additions, red for deletions, blue for both — which put the panel's

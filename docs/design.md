@@ -483,17 +483,40 @@ file and clearing its debt out from under them would be the wrong moment. The fi
 instead — the status bar becomes the button, alongside a lens action, an editor-title button
 and Alt+Enter.
 
-**Parking went with the sequence.** One review is live at a time, and starting another file
-ends the current one; per-section progress *is* the state, so there is no separate position
-left to preserve. An earlier version parked a review and resumed it if the file was still
-byte-identical, a check that answers the wrong question — it says nothing about how far the
-review got, and any editing at all makes it fail. A review does outlive its tab being closed (the document
-usually does too, and an accidental close is not a decision to abandon a file) and ends when
-the document itself closes, since its offsets describe a buffer that no longer exists.
-Marking a file reviewed from the queue also ends its review, since the debt is being cleared
-anyway. The start gate covers the whole async setup, so a doubled gesture — a double-click on
-a row, an impatient re-click — still collapses into one review, and asking to review the file
-already under review just jumps back to its typing position.
+**Opening another file parks a review; it does not end it.** One review is *live* at a time,
+which is what an editor can support — the session read-only flag, the `type` override and the
+overlay all belong to one document — but the one being left behind keeps everything that
+matters: its sections, each one's position, and the version of the file it is against. Opening
+that file again picks the same review up where it stopped, caret included, and the queue row
+says so ("paused 3/9", where a live one reads "reviewing 3/9").
+
+A parked review holds nothing while it waits. Nothing is dimmed, nothing is locked, and the
+file is an ordinary editor, because dimmed text nobody can type into is a lie, and a document
+that refuses to be written to with nothing on screen explaining why is worse than one that
+gave the review up. Buffer changes still reach it, though, so a formatter, an agent or the
+reviewer's own writing moves a parked review's sections exactly as it moves a live one's —
+which is what makes picking one up honest rather than optimistic. Text written into a parked
+file is not recorded as the reviewer taking a section over: nothing was guiding the file, so
+that edit is indistinguishable from a formatter's, and the section it landed in still has to
+be typed out before it closes.
+
+An earlier version of parking resumed a review only if the file was still byte-identical, and
+that check was dropped for answering the wrong question — it says nothing about how far the
+review got, and any editing at all makes it fail. What replaced it is not a better check but
+no check: per-section progress is remapped as the file moves, so there is nothing left to
+verify when it is picked up. Two things end a parked review rather than merely dating it, and
+both are about having nothing left to point at — its document closing, since its offsets
+describe a buffer that no longer exists, and its baseline going away. A live review ends on
+those terms and three more: the file marked reviewed from the queue, the change set page taking
+it over, and the reviewer stopping it. Stopping (Shift+Esc) is now the only gesture that throws
+review progress away on purpose, and it says as much.
+
+A review outlives its *tab* being closed only as far as the document does — usually a moment
+longer, since an accidental close is not a decision to abandon a file, but no further. The
+start gate covers the whole async setup, so a doubled gesture — a double-click on a row, an
+impatient re-click — still collapses into one review, and asking to review the file already
+under review just jumps back to its typing position. Resetting a paused review is a way of
+asking for it back with nothing claimed, so it is picked up first and then reset.
 
 ### Fills: what the flow hands you, and what it advertises
 

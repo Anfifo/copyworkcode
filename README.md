@@ -47,7 +47,9 @@ Early development, but the core loop works end to end:
   way round, if writing is mostly what you do.
 - **Walk it in any order.** Sections aren't a queue — click into any of them and start
   typing. Finishing one still moves you to the next, so you can also just keep typing and
-  be led through the file.
+  be led through the file. Opening another file pauses the review you were in rather than
+  ending it: come back to that file and it picks up exactly where you stopped, even if the
+  file changed while it waited.
 - **Skippable at every scale.** Fill the next word or the rest of a line, skip a section or
   a whole file, or set globs for files you never want to review. Filled text is never
   counted as typed.

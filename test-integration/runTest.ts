@@ -105,10 +105,11 @@ async function main(): Promise<void> {
   // Reviewed with the fill-next-word control only.
   fs.writeFileSync(path.join(fixture, 'word.ts'), 'w1\nconst sum = add(a, b);\n');
   fs.writeFileSync(path.join(baselines, 'word.ts'), 'w1\n');
-  // Review parked partway through by starting another file, then resumed.
+  // Review parked partway through by opening another file, written into while
+  // it waits, then resumed and finished.
   fs.writeFileSync(path.join(fixture, 'parked.ts'), 'pa1\npa2\npa3\n');
   fs.writeFileSync(path.join(baselines, 'parked.ts'), 'pa1\n');
-  // The other file, started (and dropped) while the one above waits.
+  // The other file: reviewed while the one above waits, then parked in its turn.
   fs.writeFileSync(path.join(fixture, 'other.ts'), 'ob1\nob2\n');
   fs.writeFileSync(path.join(baselines, 'other.ts'), 'ob1\n');
   // Reviewed with `startEditing` on: editable from the first keystroke.
@@ -135,9 +136,9 @@ async function main(): Promise<void> {
   const state = JSON.parse(
     fs.readFileSync(path.join(fixture, '.copyworkcode', 'state.json'), 'utf8')
   );
-  if (state.reviews.length !== 21) {
+  if (state.reviews.length !== 22) {
     throw new Error(
-      `expected 21 review records in the fixture, found ${state.reviews.length}`
+      `expected 22 review records in the fixture, found ${state.reviews.length}`
     );
   }
   const advanced = fs.readFileSync(path.join(baselines, 'sample.ts'), 'utf8');

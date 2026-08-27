@@ -101,8 +101,9 @@ Sections as a strict sequence, with the flow always pointing at "the next one".
   clicking anywhere is free even with the buffer read-only, and a flow that insists on the
   next section spends its time fighting the user for it. Sections became a set with
   per-section progress, keeping the ordered walk as the default motion and dropping it as a
-  rule (2026-08-19, see design.md). Parking went with it: per-section progress *is* the
-  state, and the byte-identical resume check it depended on answers the wrong question.
+  rule (2026-08-19, see design.md). The byte-identical resume check went with it, for
+  answering the wrong question about a parked review; parking itself came back without one,
+  since per-section progress is remapped as the file moves (see design.md).
 
 ### Marking changed code outside a review
 

@@ -110,10 +110,13 @@ interface Focus {
   guided: boolean;
 }
 
-/** What the debt view shows about the file under review. */
+/** What the debt view shows about a file with a review on it. */
 export interface ReviewProgress {
   claimed: number;
   total: number;
+  /** True for a review being kept rather than run: the reviewer moved to another
+   * file, and this one's progress is waiting for them. */
+  paused: boolean;
 }
 
 /**
@@ -147,6 +150,19 @@ export interface ReviewProgress {
  * led straight through the file — but clicking anywhere else hands the editor
  * back immediately. Progress is coverage ("6 of 9 claimed"), not order.
  *
+ * Moving to another file keeps where the review got to. The one being left is
+ * *parked*: its sections, their positions and its record of the version under
+ * review are all kept, and reviewing that file again picks up exactly where it
+ * stopped. Only one review is live at a time, which is what an editor can
+ * actually support — the read-only flag, the `type` override and the overlay all
+ * belong to one document — so a parked review is not a second live one. Nothing
+ * of it is on screen, nothing is locked, and the file is an ordinary editor
+ * again. Buffer changes still reach it, though, so a formatter or an agent
+ * rewriting a file while its review waits moves that review's sections exactly
+ * as it would a live one's. It ends only when there is nothing left for it to
+ * point at: its document closes, its debt is cleared some other way, or another
+ * surface takes the file over.
+ *
  * Because edits are real, the buffer changes under the review, and every
  * change — the reviewer's own, a formatter's, an agent's, an undo — is
  * reconciled by remapping the section set (see `core/sections.ts`) rather than
@@ -161,6 +177,10 @@ export interface ReviewProgress {
  */
 export class RetypeController implements vscode.Disposable {
   private session?: Session;
+  /** Reviews the reviewer stepped away from, by file. Held for as long as the
+   * window lives and never written to disk: positions describe a buffer, and a
+   * buffer is only a fact while the editor is open. */
+  private parked = new Map<string, Session>();
   /** Guards the async span of start() before `session` exists, so a doubled
    * command invocation (double-click, impatient re-click) can't interleave
    * two setups over the same state. */
@@ -280,21 +300,20 @@ export class RetypeController implements vscode.Disposable {
     // typing, a formatter, an agent writing the file again, an undo. The
     // section set is moved to match the new offsets and the review continues.
     this.changeGuard = vscode.workspace.onDidChangeTextDocument((e) => {
-      const s = this.session;
-      if (!s || e.document !== s.document || e.contentChanges.length === 0) return;
-      this.applyChanges(s, e.contentChanges);
+      if (e.contentChanges.length === 0) return;
+      // Parked reviews are reconciled too. Their offsets go as stale as a live
+      // review's when the file moves under them, and they are the ones nobody
+      // is watching, which is exactly where a stale one would go unnoticed.
+      const s = this.sessionFor(e.document);
+      if (s) this.applyChanges(s, e.contentChanges);
     });
     // A closed document is a review with nothing left to point at: its offsets
     // describe a buffer that no longer exists. Closing the tab alone does not
     // end the review — the document outlives it for a moment, and a tab closed
     // by accident is not a decision to abandon the file.
     this.closeGuard = vscode.workspace.onDidCloseTextDocument((document) => {
-      const s = this.session;
-      if (s?.document === document) {
-        void this.stop(
-          `review of ${path.basename(s.file)} ended — the file was closed.`
-        );
-      }
+      const s = this.sessionFor(document);
+      if (s) this.drop(s, `${this.which(s)} ended — the file was closed.`);
     });
     this.focusGuard = vscode.window.onDidChangeActiveTextEditor((editor) => {
       this.syncTypeOverride();
@@ -346,20 +365,125 @@ export class RetypeController implements vscode.Disposable {
       await this.jumpToCurrent();
       return;
     }
-    // The gate covers the handover too — ending the previous review awaits, and
-    // a second click during that window would start its own setup alongside
+    // The gate covers the handover too — parking the previous review awaits,
+    // and a second click during that window would start its own setup alongside
     // this one.
     this.starting = true;
     try {
-      if (this.session) {
-        await this.stop(
-          `review of ${path.basename(this.session.file)} ended — moved to another file.`
-        );
-      }
+      if (this.session) await this.park(this.session);
+      // Coming back to a file the reviewer left part way through is not a new
+      // review of it: it is the same one, picked up where they stopped.
+      if (await this.resume(file)) return;
       await this.startLocked(root, file);
     } finally {
       this.starting = false;
     }
+  }
+
+  /**
+   * Set a review down without ending it, because the reviewer asked for another
+   * file. Everything on screen goes — the overlay, the lens strip, the status
+   * bar — and the read-only flag lifts, so the file being left behind is an
+   * ordinary editor rather than a document that refuses to be typed in for
+   * reasons nothing is showing. What stays is the state: the sections, what each
+   * one has covered, and the version the review is against.
+   */
+  private async park(s: Session): Promise<void> {
+    this.session = undefined;
+    await this.disarm(s);
+    await this.teardown();
+    this.parked.set(s.file, s);
+    void vscode.window.setStatusBarMessage(
+      `CopyWorkCode: review of ${path.basename(s.file)} paused at ` +
+        `${claimedCount(s.sections)}/${s.sections.length} claimed — ` +
+        'opening it again picks up here.',
+      6000
+    );
+  }
+
+  /**
+   * Pick a parked review back up: the same sections with the same positions, the
+   * caret where it left off, and guidance armed again unless it was parked with
+   * editing enabled.
+   *
+   * Answers whether there was one to pick up, so the caller can start a fresh
+   * review instead. Two things make a parked review unusable rather than merely
+   * stale, and both are checked here rather than papered over: a document that
+   * has closed since, whose offsets describe a buffer that no longer exists, and
+   * a file with nothing left behind it to compare against. Everything else — the
+   * file rewritten, reformatted, reverted while it waited — was reconciled as it
+   * happened, the same way it is for a live review.
+   */
+  private async resume(file: string): Promise<boolean> {
+    const s = this.parked.get(file);
+    if (!s) return false;
+    this.parked.delete(file);
+    if (s.document.isClosed || this.source.baselineFor(file) === undefined) {
+      this.emitter.fire();
+      return false;
+    }
+    this.session = s;
+    this.overrideLost = false;
+    await vscode.window.showTextDocument(s.document, { preview: false });
+    this.syncTypeOverride();
+    if (!s.editing && !this.typeOverride) {
+      // The answer a review that cannot arm at all gets — except that here there
+      // is progress to protect, so it goes back where it was rather than being
+      // spent on a review that could not check a keystroke.
+      this.session = undefined;
+      this.parked.set(file, s);
+      void vscode.window.showErrorMessage(
+        'CopyWorkCode: another extension intercepts typing; guided retype is unavailable.'
+      );
+      return true;
+    }
+    this.fx.bind(s.document);
+    if (!s.editing) await this.arm(s);
+    await this.jumpToCurrent();
+    this.startEmitter.fire(file);
+    void vscode.window.setStatusBarMessage(
+      `CopyWorkCode: back in ${path.basename(s.file)} at ` +
+        `${claimedCount(s.sections)}/${s.sections.length} claimed.`,
+      4000
+    );
+    return true;
+  }
+
+  /** The review a document belongs to, live or parked. */
+  private sessionFor(document: vscode.TextDocument): Session | undefined {
+    if (this.session?.document === document) return this.session;
+    for (const parked of this.parked.values()) {
+      if (parked.document === document) return parked;
+    }
+    return undefined;
+  }
+
+  /** Every review this controller is holding, the live one first. */
+  private *reviews(): Iterable<Session> {
+    if (this.session) yield this.session;
+    yield* this.parked.values();
+  }
+
+  /** How a message names a review the reviewer may not be looking at. */
+  private which(s: Session): string {
+    return this.session === s
+      ? `review of ${path.basename(s.file)}`
+      : `paused review of ${path.basename(s.file)}`;
+  }
+
+  /**
+   * End a review outright, live or parked. A parked one has nothing on screen to
+   * take down, but it still says so: progress the reviewer meant to come back to
+   * is exactly the kind of thing that must not vanish without a word.
+   */
+  private drop(s: Session, message: string): void {
+    if (this.session === s) {
+      void this.stop(message);
+      return;
+    }
+    this.parked.delete(s.file);
+    this.note(message);
+    this.emitter.fire();
   }
 
   private async startLocked(root: string, file: string): Promise<void> {
@@ -883,19 +1007,35 @@ export class RetypeController implements vscode.Disposable {
    * the URI's offset lost. Empty once that section is gone — the review it
    * belonged to ended, or an edit moved it — which is the honest answer. */
   removedTextFor(uri: vscode.Uri): string {
-    const s = this.session;
-    if (!s || !uri.path.startsWith(`/${s.id}/`)) return '';
-    const section = s.sections.find(
-      (candidate) => candidate.start === Number(uri.query)
-    );
-    return section ? `${section.removedLines.join('\n')}\n` : '';
+    for (const s of this.reviews()) {
+      for (const section of s.sections) {
+        if (section.removedLines.length === 0) continue;
+        // Matched by the whole name a section's document would be given, not by
+        // the offset alone: with parked reviews holding sections of their own, an
+        // offset no longer says which review's removal is being asked for.
+        const mine = removedUri(
+          s.file,
+          s.id,
+          section.start,
+          section.removedLines.length
+        );
+        if (mine.path === uri.path && mine.query === uri.query) {
+          return `${section.removedLines.join('\n')}\n`;
+        }
+      }
+    }
+    return '';
   }
 
-  /** Coverage of the live review, for the debt view. */
+  /** Coverage of this file's review, live or parked, for the debt view. */
   progressFor(file: string): ReviewProgress | undefined {
-    const s = this.session;
-    if (!s || s.file !== file) return undefined;
-    return { claimed: claimedCount(s.sections), total: s.sections.length };
+    const s = this.session?.file === file ? this.session : this.parked.get(file);
+    if (!s) return undefined;
+    return {
+      claimed: claimedCount(s.sections),
+      total: s.sections.length,
+      paused: s !== this.session,
+    };
   }
 
   /**
@@ -912,6 +1052,20 @@ export class RetypeController implements vscode.Disposable {
    */
   resetReview(file?: string): Promise<void> {
     return this.serialize(async () => {
+      // Resetting a review the reviewer walked away from is a way of asking for
+      // it back, with nothing claimed. It has to come back first: the reset
+      // rewrites the file and moves the caret, which is not something to do to a
+      // document nothing is showing.
+      if (file !== undefined && this.session?.file !== file && this.parked.has(file)) {
+        if (this.starting) return;
+        this.starting = true;
+        try {
+          if (this.session) await this.park(this.session);
+          await this.resume(file);
+        } finally {
+          this.starting = false;
+        }
+      }
       const s = this.session;
       if (!s || (file !== undefined && s.file !== file)) {
         void vscode.window.setStatusBarMessage(
@@ -992,12 +1146,15 @@ export class RetypeController implements vscode.Disposable {
    * since the reviewer is owed a reason for a review ending under them.
    */
   async forget(file: string, message?: string): Promise<void> {
-    if (this.session?.file === file) {
-      await this.stop(
-        message ??
-          `review of ${path.basename(file)} ended — it was marked reviewed without typing.`
-      );
+    const s = this.session?.file === file ? this.session : this.parked.get(file);
+    if (!s) return;
+    const reason =
+      message ?? `${this.which(s)} ended — it was marked reviewed without typing.`;
+    if (s === this.session) {
+      await this.stop(reason);
+      return;
     }
+    this.drop(s, reason);
   }
 
   // --- ending -----------------------------------------------------------------
@@ -1012,7 +1169,9 @@ export class RetypeController implements vscode.Disposable {
     return this.serialize(async () => {
       if (!this.session) return;
       await this.stop(
-        message ?? 'review stopped. Your edits stay in the file; the debt stays too.'
+        message ??
+          'review stopped and its progress discarded. Your edits stay in the ' +
+            'file; the debt stays too.'
       );
     });
   }
@@ -1175,8 +1334,10 @@ export class RetypeController implements vscode.Disposable {
   ): void {
     // A reset writes the whole document itself and rebuilds once it is done.
     // Left to this path it would look exactly like a revert from disk, and be
-    // announced as one.
-    if (this.resetting) return;
+    // announced as one. Only the review being reset is exempt: a parked one
+    // whose file happens to change in that window is an ordinary change.
+    if (this.resetting && this.session === s) return;
+    const claimedBefore = claimedCount(s.sections);
     const changes = contentChanges.map((change) => ({
       from: change.rangeOffset,
       to: change.rangeOffset + change.rangeLength,
@@ -1195,14 +1356,23 @@ export class RetypeController implements vscode.Disposable {
     ) {
       this.rebuild(
         s,
-        'the file was replaced — the review restarted from its new content.'
+        this.session === s
+          ? 'the file was replaced — the review restarted from its new content.'
+          : `${path.basename(s.file)} was replaced — its paused review restarted ` +
+            'from the new content.'
       );
       return;
     }
     if (s.editing) markHandEdited(s.sections, changes);
     remapSections(s.sections, changes, after);
     if (s.active && isClaimed(s.active)) s.active = undefined;
-    this.updateUi();
+    if (this.session === s) {
+      this.updateUi();
+    } else if (claimedCount(s.sections) !== claimedBefore) {
+      // A parked review draws nothing, so the only thing left to bring up to
+      // date is the queue row printing its coverage — and only if that moved.
+      this.emitter.fire();
+    }
   }
 
   /**
@@ -1214,8 +1384,9 @@ export class RetypeController implements vscode.Disposable {
   private rebuild(s: Session, note?: string): boolean {
     const baseline = this.source.baselineFor(s.file);
     if (baseline === undefined) {
-      void this.stop(
-        'review ended — there is nothing to compare this file against any more.'
+      this.drop(
+        s,
+        `${this.which(s)} ended — there is nothing to compare it against any more.`
       );
       return false;
     }
@@ -1223,13 +1394,14 @@ export class RetypeController implements vscode.Disposable {
     s.sections = buildSections(baseline, s.original);
     s.active = undefined;
     if (s.sections.length === 0) {
-      void this.stop('review ended — the reloaded file has nothing left to review.');
+      this.drop(s, `${this.which(s)} ended — there is nothing left in it to review.`);
       return false;
     }
     if (note) this.note(note);
     const first = nextUnclaimed(s.sections);
     if (first) s.active = first;
-    this.updateUi();
+    if (this.session === s) this.updateUi();
+    else this.emitter.fire();
     return true;
   }
 
@@ -1443,7 +1615,8 @@ export class RetypeController implements vscode.Disposable {
       const stopLens = lens(
         'Stop',
         'copyworkcode.abortReview',
-        'Stop this review — your edits stay in the file and the debt stays (Shift+Esc)'
+        'Stop this review and discard its progress — your edits stay in the ' +
+          'file and the debt stays (Shift+Esc)'
       );
       const editLens = s.editing
         ? lens(
@@ -1671,6 +1844,7 @@ export class RetypeController implements vscode.Disposable {
   }
 
   dispose(): void {
+    this.parked.clear();
     this.changeGuard.dispose();
     this.closeGuard.dispose();
     this.focusGuard.dispose();

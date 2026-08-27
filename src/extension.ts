@@ -214,7 +214,7 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
     ) ?? Promise.resolve()
   );
   const decorations = new DebtDecorations(
-    (file) => retype?.progressFor(file) !== undefined
+    (file) => retype?.progressFor(file)?.paused === false
   );
   tree = new DebtTreeProvider(
     root,
@@ -246,9 +246,10 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
     source.onDidChangeMode(() => tree?.refresh()),
     retype.onDidFinish(() => tree?.refresh()),
     changeSet.onDidFinish(() => tree?.refresh()),
-    // Starting a review moves no baseline, but the row that is now under review
-    // has to pick up its tint and its "reviewing N/M" description. It is also
-    // where the change set page lets go of that one file.
+    // Starting or resuming a review moves no baseline, but the row it belongs to
+    // has to pick up its tint and its "reviewing N/M" description, and whichever
+    // row was paused in its place has to give the tint back. It is also where the
+    // change set page lets go of that one file.
     retype.onDidStart((file) => {
       tree?.refresh();
       changeSet?.dropFile(file);
