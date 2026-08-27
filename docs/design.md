@@ -647,9 +647,10 @@ What the page can do that a buffer cannot, and what it cannot:
   thousands of lines nobody intends to read, and sending every one of them to open the page is
   a cost paid on every file for the sake of the few gaps anyone opens.
 - **No language features.** No IntelliSense, no go-to-definition, no hover from a language
-  server. That is the trade, and the reason the editor surface is not going anywhere: "open in
-  editor" sits on every file heading and on the region being worked on, and starts no review of
-  its own.
+  server; the syntax colour below is a lexer's guess from the file's extension, not a language
+  service's answer. That is the trade, and the reason the editor surface is not going anywhere:
+  "open in editor" sits on every file heading and on the region being worked on, and starts no
+  review of its own.
 
 The document the page draws is line-ending normalized, which the buffer review cannot be. A
 matched keystroke in an editor has to leave the file's own endings alone; a page writes code
@@ -660,15 +661,32 @@ and never something the reviewer owes. The page therefore counts a CRLF line one
 shorter than the editor review does, which is only visible in the "typed *n*/*m*" reading and
 costs nothing — the two surfaces already keep their own positions.
 
-The page's colour language is the review's and deliberately no more than that: code still owed
-is dimmed and comes up to full strength as it is typed, lines the change removed are drawn in
-the deleted-resource colour, and nothing else is coloured. In particular there is no syntax
-highlighting, which is the first thing a page like this gets asked for. The lesson from the
-rejected diff-editor surface applies to it exactly — colour that is loud everywhere drowns out
-the one distinction the review runs on, which here is owed against covered. A highlighter is
-parked in [brainstorm.md](brainstorm.md); the per-line structure the page already renders is
-the way in if real use asks for one. Every colour comes from the theme, because a page
-carrying its own palette is a page that looks wrong in half the themes it opens in.
+The page's colour language is the review's first: code still owed is dimmed and comes up to
+full strength as it is typed, and lines the change removed are drawn in the deleted-resource
+colour. Owed against covered is the distinction the whole surface exists to draw, and it is
+carried by *opacity* — which is what lets syntax colour sit underneath it rather than compete
+with it, since a dimmed run is dim whatever colour it is. The page shipped uncoloured to find
+out whether that was enough on its own; it was not. A wall of monochrome code reads as flat
+rather than as calm, so the page is syntax coloured now, owed text included.
+
+The highlighter (`media/highlight.js`) is coarse on purpose: five kinds of run — comment,
+string, number, keyword, type — chosen from the file's extension, with no grammar per language
+and no dependency to keep. What it must not get wrong is the *text*: a line's tokens
+concatenate back to that line character for character, which is the invariant a page built on
+retyping cannot do without, and it is the one thing the highlighter's tests pin down. A run
+coloured wrongly is only coloured wrongly, and colour is not what the reviewer is reproducing.
+Two rules keep the guessing quiet rather than conspicuous: a word straight after a dot is a
+member name and never a keyword (`map.set`, `x.type`), and the keyword union leaves out the
+words that are also everyday names. A quote left unterminated costs its own line and no more;
+only delimiters that genuinely span lines — template literals, triple quotes — carry over. A
+block of lines beginning inside a comment is spotted by a closer arriving with no opener before
+it, which is the common case for a region drawn in the middle of a doc comment.
+
+Removed lines stay uncoloured: they keep the deleted-resource colour whole, because that colour
+is the only thing on the page saying they are gone. Every colour comes from the theme — the
+token classes take the ones the workbench gives its debug variables view, the one place it
+already colours code-like values — because a page carrying its own palette is a page that looks
+wrong in half the themes it opens in.
 
 The page runs under a strict content policy: nothing loads but the extension's own stylesheet
 and script, and the script runs only under the nonce minted for that load. Code goes into the

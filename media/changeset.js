@@ -10,6 +10,11 @@
  *
  * Code is written into the document as text nodes, never as markup — a file's
  * own contents can never become part of this page's structure.
+ *
+ * Colour is the one thing the page decides for itself. The token runs it draws
+ * code in come from `highlight.js` beside it, which is a reading aid and nothing
+ * the review's rules turn on: a run coloured wrongly is still the same
+ * characters, in the same order, owed in the same places.
  */
 
 (function () {
@@ -23,6 +28,10 @@
   const drawn = new Map();
   /** The one region keystrokes go to: `{ file, index }`, or null. */
   let active = null;
+  /** Coarse token runs per line. Plain text if that script did not load, since
+   * colour is an aid to reading the page and not a part of it. */
+  const tokenize =
+    window.tokenizeCode || ((lines) => lines.map((line) => [{ text: line, cls: '' }]));
 
   const doc = document.getElementById('doc');
   const summary = document.getElementById('summary');
@@ -134,7 +143,7 @@
     const sections = new Map();
     for (const block of file.blocks) {
       if (block.kind === 'context') {
-        root.appendChild(codeBlock('code-block context', block.lines));
+        root.appendChild(codeBlock('code-block context', block.lines, file.relative));
       } else if (block.kind === 'gap') {
         root.appendChild(gapButton(file, block));
       } else {
@@ -164,13 +173,24 @@
       // can be a whole new file, and a keystroke is no reason to build one
       // again — see paintCode.
       let start = 0;
-      for (const line of section.addedLines) {
+      // Tokenized once, for the region as a whole: a keystroke moves the typing
+      // position, which is no reason to work out what the code says again.
+      const tokens = tokenize(section.addedLines.map(textOf), file.relative);
+      for (let i = 0; i < section.addedLines.length; i++) {
+        const line = section.addedLines[i];
         const row = el('div', 'row');
         row.appendChild(span('n', String(line.n)));
         const text = el('span', 'text');
         row.appendChild(text);
         added.appendChild(row);
-        rows.push({ text, line: line.text, start, covered: -1, caret: false });
+        rows.push({
+          text,
+          line: line.text,
+          tokens: tokens[i],
+          start,
+          covered: -1,
+          caret: false,
+        });
         start += line.text.length + 1;
       }
       node.appendChild(added);
@@ -190,15 +210,46 @@
     return block;
   }
 
-  function codeBlock(className, lines) {
+  function codeBlock(className, lines, name) {
     const block = el('div', className);
-    for (const line of lines) {
+    const tokens = tokenize(lines.map(textOf), name);
+    for (let i = 0; i < lines.length; i++) {
       const row = el('div', 'row');
-      row.appendChild(span('n', String(line.n)));
-      row.appendChild(span('text', line.text));
+      row.appendChild(span('n', String(lines[i].n)));
+      row.appendChild(codeSpan('text', tokens[i], 0, lines[i].text.length));
       block.appendChild(row);
     }
     return block;
+  }
+
+  /**
+   * A stretch of one line's tokens as a single span: `[from, to)` of the line,
+   * with each coloured run inside an element of its own and everything else a
+   * bare text node. A row's two halves are drawn this way from the same token
+   * list, so a keyword the typing position falls inside is still a keyword on
+   * both sides of the caret.
+   */
+  function codeSpan(className, tokens, from, to) {
+    const node = el('span', className);
+    let at = 0;
+    for (const token of tokens) {
+      const end = at + token.text.length;
+      const start = Math.max(at, from);
+      const stop = Math.min(end, to);
+      if (stop > start) {
+        const text = token.text.slice(start - at, stop - at);
+        node.appendChild(
+          token.cls ? span('t-' + token.cls, text) : document.createTextNode(text)
+        );
+      }
+      at = end;
+      if (at >= to) break;
+    }
+    return node;
+  }
+
+  function textOf(line) {
+    return line.text;
   }
 
   function gapButton(file, block) {
@@ -215,12 +266,13 @@
 
   function fillGap(message) {
     const parts = drawn.get(message.file);
-    if (!parts) return;
+    const data = byPath.get(message.file);
+    if (!parts || !data) return;
     const selector =
       '.gap[data-from="' + message.from + '"][data-to="' + message.to + '"]';
     const node = parts.root.querySelector(selector);
     if (!node) return;
-    node.replaceWith(codeBlock('code-block context', message.lines));
+    node.replaceWith(codeBlock('code-block context', message.lines, data.relative));
   }
 
   // --- one region -----------------------------------------------------------
@@ -284,11 +336,13 @@
   function drawRow(row) {
     row.text.textContent = '';
     if (row.covered > 0) {
-      row.text.appendChild(span('covered', row.line.slice(0, row.covered)));
+      row.text.appendChild(codeSpan('covered', row.tokens, 0, row.covered));
     }
     if (row.caret) row.text.appendChild(el('span', 'caret'));
     if (row.covered < row.line.length) {
-      row.text.appendChild(span('owed', row.line.slice(row.covered)));
+      row.text.appendChild(
+        codeSpan('owed', row.tokens, row.covered, row.line.length)
+      );
     }
   }
 

@@ -270,6 +270,31 @@ button:focus-visible {
   opacity: 1;
 }
 
+/* Syntax colour, in the colours the workbench gives its debug variables view:
+   the one place it already colours code-like values, so these arrive from the
+   theme rather than from a palette shipped with the page. Everything else stays
+   the plain foreground. Owed against covered is still the distinction the page
+   runs on, and it is opacity — which rides over whatever colour a run has. */
+.t-comment {
+  color: var(--vscode-descriptionForeground, currentColor);
+}
+
+.t-string {
+  color: var(--vscode-debugTokenExpression-string, currentColor);
+}
+
+.t-number {
+  color: var(--vscode-debugTokenExpression-number, currentColor);
+}
+
+.t-keyword {
+  color: var(--vscode-debugTokenExpression-name, currentColor);
+}
+
+.t-type {
+  color: var(--vscode-debugTokenExpression-boolean, currentColor);
+}
+
 .caret {
   display: inline-block;
   width: 0;

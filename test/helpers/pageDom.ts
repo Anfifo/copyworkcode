@@ -3,9 +3,9 @@
  *
  * The page is the one part of the extension that cannot be reached from the
  * integration tests: nothing can post a message *into* a webview from the
- * extension host, and nothing can press a key inside one. So the script is
- * loaded here instead — the real file, not a copy of its logic — with the four
- * globals a webview hands it standing in for the browser.
+ * extension host, and nothing can press a key inside one. So its scripts are
+ * loaded here instead — the real files, not a copy of their logic — with the four
+ * globals a webview hands them standing in for the browser.
  *
  * What this models is structure: elements, their classes, their text, their data
  * attributes, and the three events the page listens for. What it deliberately
@@ -205,6 +205,11 @@ export interface Page {
   doc: FakeElement;
 }
 
+/** The text of one file from `media/`, for whichever test runs it. */
+export function mediaSource(name: string): string {
+  return fs.readFileSync(path.join(repoRoot(), 'media', name), 'utf8');
+}
+
 /** Repo root, found by walking up from the compiled test to the manifest. */
 function repoRoot(): string {
   let dir = __dirname;
@@ -217,7 +222,7 @@ function repoRoot(): string {
 }
 
 /**
- * Load `media/changeset.js` into a document of the shape its HTML provides, and
+ * Load the page's scripts into a document of the shape its HTML provides, and
  * hand back the ways a test can talk to it.
  */
 export function loadPage(): Page {
@@ -247,7 +252,7 @@ export function loadPage(): Page {
   const documentEvents = new FakeElement('#document');
 
   const windowEvents = new FakeElement('#window');
-  const win = {
+  const win: Record<string, unknown> = {
     innerHeight: 800,
     addEventListener: (type: string, handler: (event: unknown) => void) =>
       windowEvents.addEventListener(type, handler),
@@ -261,19 +266,19 @@ export function loadPage(): Page {
     return timers.length;
   };
 
-  const source = fs.readFileSync(
-    path.join(repoRoot(), 'media', 'changeset.js'),
-    'utf8'
-  );
   // The page is a script, not a module: run it with the globals a webview gives
   // it. Running the shipped file is the whole point — a copy of its logic here
-  // would be a test of the copy.
-  new Function('document', 'window', 'acquireVsCodeApi', 'setTimeout', source)(
-    document,
-    win,
-    () => api,
-    later
-  );
+  // would be a test of the copy. The highlighter goes first and hangs itself off
+  // `window`, which is how the page finds it in a browser too.
+  const run = (source: string) =>
+    new Function('document', 'window', 'acquireVsCodeApi', 'setTimeout', source)(
+      document,
+      win,
+      () => api,
+      later
+    );
+  run(mediaSource('highlight.js'));
+  run(mediaSource('changeset.js'));
 
   const press = (stroke: Keystroke | string) => {
     const key = typeof stroke === 'string' ? { key: stroke } : stroke;

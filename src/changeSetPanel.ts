@@ -287,8 +287,8 @@ export class ChangeSetPanel implements vscode.Disposable {
 
   /**
    * The page's own HTML, with a nonce minted per load. Nothing loads from
-   * anywhere but the extension's `media` folder, and the only script that runs
-   * is the one carrying this load's nonce — an inline `<script>` injected into
+   * anywhere but the extension's `media` folder, and the only scripts that run
+   * are the two carrying this load's nonce — an inline `<script>` injected into
    * the page by anything, including a file's own contents, has no way to run.
    */
   private html(webview: vscode.Webview): string {
@@ -303,6 +303,7 @@ export class ChangeSetPanel implements vscode.Disposable {
       .replace(/\{\{cspSource\}\}/g, webview.cspSource)
       .replace(/\{\{nonce\}\}/g, nonce)
       .replace(/\{\{style\}\}/g, String(asset('changeset.css')))
+      .replace(/\{\{highlight\}\}/g, String(asset('highlight.js')))
       .replace(/\{\{script\}\}/g, String(asset('changeset.js')));
   }
 

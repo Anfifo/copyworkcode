@@ -67,22 +67,6 @@ status ("filled") distinct from typed and skipped.
   typed); the region-sized fill and a distinct "filled" status stay parked until real use
   shows where the line between fair and too-easy sits.
 
-### Syntax highlighting on the change set page
-
-The page draws code with no syntax colour at all: dim for what is still owed, full strength
-for what has been typed, the deleted-resource colour for what went. A bundled highlighter
-would colour it the way an editor does.
-
-- **Upside:** code reads faster when it is coloured, and the page is the surface with the
-  most code on screen at once.
-- **Downside:** a runtime dependency and a language map to keep, and — the real cost — a
-  second loud colour scheme competing with the only distinction the page exists to draw.
-  That is the mistake the diff-editor surface was rejected for, in a new place.
-- **Status:** parked (2026-08-20) in favour of shipping the review's own colour language
-  first. The page renders every line as its own element, so a highlighter can be dropped in
-  later without changing what the extension sends it. Revisit once real use says whether
-  uncoloured code on the page reads as calm or as flat.
-
 ## Rejected (kept for the record)
 
 ### Shareable proof-of-review for teams

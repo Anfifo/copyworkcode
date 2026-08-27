@@ -194,6 +194,48 @@ test('the first region still owed is where the keystrokes go', () => {
   assert.equal(row(added(first)[0]).caret, true);
 });
 
+test('code is drawn coloured, and stays coloured either side of the caret', () => {
+  const baseline = file(20);
+  const { page } = pageWith(
+    loaded('/w/a.ts', baseline, baseline.replace('line 10', 'const total = 1;'))
+  );
+  const region = page.regions(page.files()[0])[0];
+  const text = () => added(region)[0].querySelector('.text');
+
+  assert.equal(
+    text()?.querySelector('.owed')?.querySelector('.t-keyword')?.textContent,
+    'const'
+  );
+  assert.equal(
+    text()?.querySelector('.owed')?.querySelector('.t-number')?.textContent,
+    '1'
+  );
+
+  // Three characters in, the typing position falls inside the keyword. Both
+  // halves of it stay the keyword: colour is per run of code, not per row, and
+  // the two halves are drawn from the same runs.
+  page.receive({
+    type: 'section',
+    file: '/w/a.ts',
+    index: 0,
+    state: { position: 3, touched: true },
+  });
+
+  assert.equal(
+    text()?.querySelector('.covered')?.querySelector('.t-keyword')?.textContent,
+    'con'
+  );
+  assert.equal(
+    text()?.querySelector('.owed')?.querySelector('.t-keyword')?.textContent,
+    'st'
+  );
+  assert.equal(
+    row(added(region)[0]).text,
+    'const total = 1;',
+    'and the row still reads as its own line, character for character'
+  );
+});
+
 test('a keystroke is sent on, and nothing is decided on the page', () => {
   const { page } = pageWith(changedFile());
 

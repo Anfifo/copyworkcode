@@ -27,16 +27,17 @@ promoted here when they're deemed worth building.
       everyday mix of added, replaced and deleted lines, and `churn.ts` the pile-up: four
       sections in eight lines, one of them hiding eight removed lines behind two added
       ones.
-- [ ] **Dogfood the change set page** — the payload, the review state behind it and the
-      page's own script are all unit-tested now, so what is left is what no test can see.
-      Whether uncoloured code reads as calm or as flat over a long sitting, which is the
-      question the parked highlighter turns on. Whether a file's removals shown in full, in
-      place, are a relief or a wall — the page lifts the hover's twelve-line cap on purpose,
-      and `churn.ts` in the demo workspace is the pile-up to read it against. Whether three
-      lines of context either side is enough to place a change, or whether the gaps get
-      opened every time. And whether typing on a page that scrolls as one document keeps the
-      caret where the eye is, since the page follows the caret rather than the other way
-      round.
+- [ ] **Dogfood the change set page** — the payload, the review state behind it, the page's
+      own script and the highlighter are all unit-tested now, so what is left is what no test
+      can see. Whether the syntax colour reads as an aid or as noise now that it is there, and
+      whether dim-against-full still reads as clearly *through* it — the colour is deliberately
+      coarse, so the thing to watch for is a guess landing somewhere conspicuous. Whether a
+      file's removals shown in full, in place, are a relief or a wall — the page lifts the
+      hover's twelve-line cap on purpose, and `churn.ts` in the demo workspace is the pile-up
+      to read it against. Whether three lines of context either side is enough to place a
+      change, or whether the gaps get opened every time. And whether typing on a page that
+      scrolls as one document keeps the caret where the eye is, since the page follows the
+      caret rather than the other way round.
 - [ ] **Writing your own code on the change set page** — the page types the change as written
       and nothing else. The editor review's Ctrl+E, where the reviewer takes a region over and
       writes their own version, has no equivalent there: the page applies no edit anywhere, so
