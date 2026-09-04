@@ -704,6 +704,20 @@ export class RetypeController implements vscode.Disposable {
   private async handleType(args: { text: string }): Promise<void> {
     const focus = this.focus();
     if (!focus || !focus.guided) {
+      // A deletion is a section with nothing in it to reproduce, and a review
+      // opens on the first section in file order — so a file whose first change
+      // is a deletion is one whose first keystroke has nowhere to go. Left to
+      // the editor, that keystroke came back as "cannot edit in read-only
+      // editor": the workbench's voice, answering a question about the review
+      // with a fact about the buffer, and saying nothing about the one gesture
+      // the section actually wants. The review answers for its own sections.
+      if (this.session && !this.session.editing && focus?.section.kind === 'confirm') {
+        this.updateUi(
+          `nothing to type here — ${lineCount(focus.section.removedLines.length)} ` +
+            'were deleted; Enter confirms'
+        );
+        return;
+      }
       await vscode.commands.executeCommand('default:type', args);
       return;
     }
@@ -1346,6 +1360,7 @@ export class RetypeController implements vscode.Disposable {
     await this.setContext('copyworkcode.reviewEditorFocused', false);
     await this.setContext('copyworkcode.sectionActive', false);
     await this.setContext('copyworkcode.guided', false);
+    await this.setContext('copyworkcode.confirmActive', false);
     await this.setContext('copyworkcode.editing', false);
     await this.setContext('copyworkcode.reviewComplete', false);
     this.lensKey = '';
@@ -1696,7 +1711,7 @@ export class RetypeController implements vscode.Disposable {
           lens(
             'Confirm deletion',
             'copyworkcode.confirmSection',
-            'Acknowledge the deleted lines and move to the next section (Alt+S)'
+            'Acknowledge the deleted lines and move to the next section (Enter)'
           ),
           editLens,
           diffLens,
@@ -1751,6 +1766,12 @@ export class RetypeController implements vscode.Disposable {
     );
     void this.setContext('copyworkcode.sectionActive', active !== undefined);
     void this.setContext('copyworkcode.guided', focus?.guided === true);
+    // The cursor is in a deletion still owed, with guidance armed: the one
+    // state where Enter means "acknowledge this" rather than "new line".
+    void this.setContext(
+      'copyworkcode.confirmActive',
+      !s.editing && focus?.section.kind === 'confirm'
+    );
     void this.setContext('copyworkcode.editing', s.editing);
     void this.setContext('copyworkcode.reviewComplete', complete);
 
@@ -1886,7 +1907,7 @@ export class RetypeController implements vscode.Disposable {
     if (active.kind === 'confirm') {
       return (
         `${flag}$(diff-removed) Review ${claimed}/${total} · ${active.removedLines.length} line(s) deleted — ` +
-        `Alt+S confirm · Alt+J jump · ${stop}`
+        `Enter confirm · Alt+J jump · ${stop}`
       );
     }
     const at = focus?.guided

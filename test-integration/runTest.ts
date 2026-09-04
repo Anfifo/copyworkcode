@@ -51,6 +51,9 @@ async function main(): Promise<void> {
   // Buffer replaced wholesale mid-review: the sections are re-derived.
   fs.writeFileSync(path.join(fixture, 'replaced.ts'), 'p1\np2\n');
   fs.writeFileSync(path.join(baselines, 'replaced.ts'), 'p1\n');
+  // Opens on a deletion: the first section has nothing in it to type.
+  fs.writeFileSync(path.join(fixture, 'deletionfirst.ts'), 'a\nc\nNEW\n');
+  fs.writeFileSync(path.join(baselines, 'deletionfirst.ts'), 'a\nb\nc\n');
   // Wrong keys that must not reach the file, then one that is asked for.
   fs.writeFileSync(path.join(fixture, 'wrongkey.ts'), 'd1\nORIGINAL\n');
   fs.writeFileSync(path.join(baselines, 'wrongkey.ts'), 'd1\n');
@@ -136,9 +139,9 @@ async function main(): Promise<void> {
   const state = JSON.parse(
     fs.readFileSync(path.join(fixture, '.copyworkcode', 'state.json'), 'utf8')
   );
-  if (state.reviews.length !== 22) {
+  if (state.reviews.length !== 23) {
     throw new Error(
-      `expected 22 review records in the fixture, found ${state.reviews.length}`
+      `expected 23 review records in the fixture, found ${state.reviews.length}`
     );
   }
   const advanced = fs.readFileSync(path.join(baselines, 'sample.ts'), 'utf8');

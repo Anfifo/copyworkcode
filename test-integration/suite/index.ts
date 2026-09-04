@@ -916,6 +916,43 @@ export async function run(): Promise<void> {
   await exec('copyworkcode.abortReview');
   await settle();
 
+  // --- A review that opens on a deletion ------------------------------------
+  // Sections are walked in file order, so a file whose first change is a
+  // deletion opens on a section with nothing in it to reproduce. The keystroke
+  // that follows used to fall through to the editor, where the session
+  // read-only flag answered it — the workbench saying something true about the
+  // buffer and nothing about the one gesture the section wants. The review
+  // answers for its own sections now, and Enter is that gesture.
+  const deletionFirst = await review('deletionfirst.ts');
+  assert.equal(
+    deletionFirst.offsetAt(editorOf('deletionfirst.ts').selection.active),
+    2,
+    'the review opens on the deletion, being the first change in the file'
+  );
+  await type('N');
+  await settle();
+  assert.equal(
+    deletionFirst.getText(),
+    'a\nc\nNEW\n',
+    'a key aimed at a deletion changes nothing'
+  );
+  await exec('copyworkcode.confirmSection');
+  await settle(150);
+  assert.equal(
+    deletionFirst.offsetAt(editorOf('deletionfirst.ts').selection.active),
+    4,
+    'confirming walks on to the section that does owe something'
+  );
+  await typeAll('NEW');
+  await settle();
+  await exec('copyworkcode.finishReview');
+  await settle();
+  const deletionRecord = reviews().find(
+    (entry) => entry.file === file('deletionfirst.ts')
+  );
+  assert.equal(deletionRecord?.hunksConfirmed, 1, 'the deletion is confirmed');
+  assert.equal(deletionRecord?.hunksTyped, 1, 'and the addition is typed');
+
   // Typing must be back to normal once no review is active. Typed into a file
   // that was never a review editor, so this cannot pass or fail on whatever
   // the last section happened to leave focused.

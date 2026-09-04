@@ -806,7 +806,15 @@ Typing in a real buffer means the editor itself modifies text the user didn't ty
   state you enter deliberately.
 - Sections that only *removed* lines are explicit stops: nothing to retype, so the lens strip
   reports how many lines were deleted there and offers a one-click confirm, recorded
-  separately from typed, skipped and edited counts.
+  separately from typed, skipped and edited counts. **Enter confirms one**, the same key that
+  acknowledges a deletion on the change set page. A printable key aimed at one is answered by
+  the review — "nothing to type here; Enter confirms" — rather than being handed to the editor,
+  where the session read-only flag used to answer it. That mattered most on the file that made
+  it visible: sections are walked in file order, so a file whose *first* change is a deletion
+  opens on a section with nothing to type, and the first keystroke of the review came back as
+  the workbench's "cannot edit in read-only editor" — a true statement about the buffer, from
+  the wrong voice, saying nothing about the one gesture the section wanted. A review answers
+  for its own sections.
 
 ## Review stats: personal only
 

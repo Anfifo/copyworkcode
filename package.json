@@ -371,6 +371,11 @@
         "when": "copyworkcode.guided && editorTextFocus && !suggestWidgetVisible"
       },
       {
+        "command": "copyworkcode.confirmSection",
+        "key": "enter",
+        "when": "copyworkcode.confirmActive && editorTextFocus && !suggestWidgetVisible"
+      },
+      {
         "command": "copyworkcode.finishReview",
         "key": "alt+enter",
         "when": "copyworkcode.reviewing && copyworkcode.reviewComplete && editorTextFocus"
