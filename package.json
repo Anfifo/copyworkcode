@@ -3,12 +3,35 @@
   "displayName": "CopyWorkCode",
   "description": "Review AI-generated code changes by typing them yourself.",
   "version": "0.0.1",
-  "private": true,
+  "publisher": "Anfifo",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Anfifo/copyworkcode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Anfifo/copyworkcode/issues"
+  },
+  "homepage": "https://github.com/Anfifo/copyworkcode#readme",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
   "categories": [
+    "AI",
+    "Education",
     "Other"
+  ],
+  "keywords": [
+    "code review",
+    "ai-generated code",
+    "claude code",
+    "learning",
+    "retype"
   ],
   "activationEvents": [
     "onStartupFinished"
