@@ -8,6 +8,7 @@ import {
   ChangeSetReview,
   FinishedFile,
   Outbound,
+  PageHandover,
   PageProgress,
   RegionGesture,
   ReviewFile,
@@ -70,7 +71,8 @@ type Incoming =
   | { type: 'reload' }
   | RegionGesture
   | { type: 'expandGap'; file: string; from: number; to: number }
-  | { type: 'openInEditor'; file: string; line: number };
+  | { type: 'openInEditor'; file: string; line: number }
+  | { type: 'editHere'; file: string; index: number };
 
 export class ChangeSetPanel implements vscode.Disposable {
   private panel?: vscode.WebviewPanel;
@@ -89,7 +91,10 @@ export class ChangeSetPanel implements vscode.Disposable {
     private source: DebtSource,
     private log: ReviewLog,
     /** Ends an editor review of a file the page is taking over. */
-    private release: (file: string) => Promise<void>
+    private release: (file: string) => Promise<void>,
+    /** Starts an editor review of a file the page is giving up, carrying the
+     * progress the page made on it. Answers whether it took. */
+    private adopt: (file: string, handover: PageHandover) => Promise<boolean>
   ) {}
 
   /** Open the page, or bring it forward if it is already open. */
@@ -216,6 +221,12 @@ export class ChangeSetPanel implements vscode.Disposable {
       case 'openInEditor':
         void this.openInEditor(message.file, message.line);
         return;
+      case 'editHere':
+        // Queued with the keystrokes: the handover reads every region's
+        // progress, and one landing mid-gesture would send a seed that is
+        // half of one state and half of another.
+        this.serialize(() => this.handOver(message.file, message.index));
+        return;
       default:
         this.serialize(() => this.gesture(message));
     }
@@ -263,6 +274,48 @@ export class ChangeSetPanel implements vscode.Disposable {
     if (before?.claimed !== this.review.progressFor(message.file)?.claimed) {
       this.emitter.fire();
     }
+  }
+
+  /**
+   * Give one file to an editor review, at the region the gesture came from,
+   * with the editor already in the reviewer's hands.
+   *
+   * This is the page's answer to a reviewer writing their own code, and it is
+   * an answer by delegation on purpose. The page applies no edit anywhere — that is what lets
+   * it be a page at all — so a rewrite here would need a write path, a text box
+   * with none of the editor's conveniences, and a story about what a changed
+   * region does to the snapshot the rest of the document is drawn from. The
+   * editor already has all three, and is where anyone would rather write code.
+   *
+   * What crosses with the file is the progress: the regions the reviewer
+   * already typed out here stay claimed there. The queue row changes hands with
+   * it, since the editor review answers for a file before the page does.
+   *
+   * A handover that does not take — no baseline any more, another start already
+   * in flight — leaves the page holding the file exactly as it was, rather than
+   * a file neither surface is reviewing.
+   */
+  private async handOver(file: string, index: number): Promise<void> {
+    const handover = this.review.handOver(file, index);
+    if (!handover) return;
+    // Marked as gone before the await, so the editor review's own start — which
+    // comes back through `dropFile` — finds a file the page has already given
+    // up rather than one to take away from it. The row it leaves behind needs
+    // no telling from here either: starting that review is what redraws it.
+    if (!(await this.adopt(file, handover))) {
+      this.review.unhand(file);
+      return;
+    }
+    this.post({ type: 'handed', file });
+  }
+
+  /**
+   * The reviewer asked to write their own code, by key rather than by button.
+   * Which region that means is the page's to say — it holds the caret — so the
+   * command is a question, and the answer comes back as `editHere`.
+   */
+  editOnPage(): void {
+    this.post({ type: 'askEdit' });
   }
 
   /**

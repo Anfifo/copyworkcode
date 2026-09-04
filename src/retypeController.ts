@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { advanceBaseline } from './core/baselineStore';
+import { PageHandover } from './core/changeSetReview';
 import { RetypeEngine } from './core/retype';
 import {
   Section,
@@ -14,6 +15,7 @@ import {
   outcomeCounts,
   remapSections,
   sectionAt,
+  seedSections,
   typedBoundary,
 } from './core/sections';
 import { DebtSource } from './debtSource';
@@ -356,7 +358,7 @@ export class RetypeController implements vscode.Disposable {
     return this.session !== undefined;
   }
 
-  async start(root: string, file: string): Promise<void> {
+  async start(root: string, file: string, handover?: PageHandover): Promise<void> {
     if (this.starting) {
       return; // doubled invocation of the same gesture — first one wins
     }
@@ -372,12 +374,59 @@ export class RetypeController implements vscode.Disposable {
     try {
       if (this.session) await this.park(this.session);
       // Coming back to a file the reviewer left part way through is not a new
-      // review of it: it is the same one, picked up where they stopped.
+      // review of it: it is the same one, picked up where they stopped — and
+      // its positions, not a seed's, are the ones that account for every edit
+      // since. A seed is what a review starting from nothing is given.
       if (await this.resume(file)) return;
-      await this.startLocked(root, file);
+      await this.startLocked(root, file, handover);
     } finally {
       this.starting = false;
     }
+  }
+
+  /**
+   * Take a file over from the change set page, at one region, with the editor
+   * already handed to the reviewer — the gesture behind "write it yourself"
+   * there. The page can type the change as written and nothing else, so the
+   * editor is where a reviewer writes their own code on either surface; what
+   * this adds is that the walk across does not cost them their place.
+   *
+   * The page's progress is a *seed*, and only where there is nothing better. A
+   * review of this file that already exists — live or parked — is the surface
+   * that has been holding it, and its positions are the ones that account for
+   * every edit since; the page's copy is a reading of the file as it stood when
+   * the page opened. So an existing review is resumed and merely handed over,
+   * and the seed is used for the case it was built for: a file the page is the
+   * only surface with progress on.
+   *
+   * Answers whether a review is now running on the file, so a page that could
+   * not give it away keeps it.
+   */
+  async adopt(root: string, file: string, handover: PageHandover): Promise<boolean> {
+    await this.start(root, file, handover);
+    // Nothing to hand over to: no baseline left, another start in flight, or a
+    // window where guidance cannot run at all. The page keeps the file.
+    if (this.session?.file !== file) return false;
+    await this.enableEditing();
+    await this.focusRegion(handover.index);
+    return true;
+  }
+
+  /**
+   * Put the caret in the region the page's gesture came from, at the point it
+   * had been typed to. A region the file no longer has is not an error worth
+   * refusing the handover over — the review is running either way — so the
+   * caret simply stays where the review put it.
+   */
+  private focusRegion(index: number): Promise<void> {
+    return this.serialize(async () => {
+      const s = this.session;
+      const section = s?.sections[index];
+      if (!s || !section) return;
+      s.active = section;
+      this.moveCursorTo(typedBoundary(section), vscode.TextEditorRevealType.InCenter);
+      this.updateUi();
+    });
   }
 
   /**
@@ -486,7 +535,11 @@ export class RetypeController implements vscode.Disposable {
     this.emitter.fire();
   }
 
-  private async startLocked(root: string, file: string): Promise<void> {
+  private async startLocked(
+    root: string,
+    file: string,
+    handover?: PageHandover
+  ): Promise<void> {
     const baseline = this.source.baselineFor(file);
     if (baseline === undefined) {
       void vscode.window.showInformationMessage(
@@ -498,6 +551,10 @@ export class RetypeController implements vscode.Disposable {
     const document = await vscode.workspace.openTextDocument(file);
     const current = document.getText();
     const sections = buildSections(baseline, current);
+    // A seed from a file that has moved on since the page read it describes
+    // regions this set does not have; `seedSections` refuses it whole rather
+    // than fitting positions to the wrong regions, and the review starts fresh.
+    if (handover) seedSections(sections, handover.sections);
 
     await vscode.window.showTextDocument(document, { preview: false });
 
@@ -546,12 +603,13 @@ export class RetypeController implements vscode.Disposable {
       return;
     }
 
-    if (startEditing()) {
-      // Opt-in: hand the editor over before the first keystroke, for someone
-      // who mostly rewrites what the agent wrote. The override was just taken
-      // and is dropped again here: the probe above is the only way to find out
-      // whether guidance *could* run, and the answer matters even when it isn't
-      // running yet.
+    if (startEditing() || handover) {
+      // Two ways to open with the editor already handed over: the opt-in
+      // setting, for someone who mostly rewrites what the agent wrote, and a
+      // handover from the change set page, where asking for it is the whole
+      // gesture. The override was just taken and is dropped again here: the
+      // probe above is the only way to find out whether guidance *could* run,
+      // and the answer matters even when it isn't running yet.
       this.session.editing = true;
       this.syncTypeOverride();
     } else {
@@ -563,6 +621,9 @@ export class RetypeController implements vscode.Disposable {
     }
 
     this.fx.bind(document);
+    // A handover is aimed at one region, and `adopt` puts the caret there once
+    // the editor is handed over; until then the review points at the first
+    // thing still owed, as any other review does.
     const first = nextUnclaimed(sections);
     if (first) {
       this.session.active = first;

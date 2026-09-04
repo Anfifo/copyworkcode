@@ -26,7 +26,7 @@
 
 import { FileView, ViewLine, ViewSection, sliceLines } from './changeSet';
 import { RetypeEngine } from './retype';
-import { SectionOutcome } from './sections';
+import { SectionOutcome, SectionSeed } from './sections';
 
 /** What one region owes, and how it stopped owing it. */
 export interface SectionState {
@@ -54,6 +54,18 @@ export interface FileDocument extends FileView {
   states: SectionState[];
 }
 
+/**
+ * A file's progress on its way to an editor review, so the reviewer can write
+ * their own code where the page can only type what is already there. Region
+ * order is the two surfaces' shared handle, so the seed is simply the states in
+ * that order, plus the region the reviewer asked from.
+ */
+export interface PageHandover {
+  sections: SectionSeed[];
+  /** The region to open at — the one the gesture came from. */
+  index: number;
+}
+
 /** A gesture from the page aimed at one region. */
 export type RegionGesture =
   | { type: 'type'; file: string; index: number; text: string }
@@ -69,7 +81,9 @@ export type Outbound =
   | { type: 'file'; file: string; states: SectionState[] }
   | { type: 'reject'; file: string; index: number }
   | { type: 'gap'; file: string; from: number; to: number; lines: ViewLine[] }
-  | { type: 'done'; file: string; summary: string };
+  | { type: 'done'; file: string; summary: string }
+  | { type: 'handed'; file: string }
+  | { type: 'askEdit' };
 
 /**
  * What a gesture comes to, before any of it has happened. Only `apply` can take
@@ -122,16 +136,27 @@ export class ChangeSetReview {
   private files = new Map<string, ReviewFile>();
   /** Files the page took over, so whatever had one is only told once. */
   private taken = new Set<string>();
+  /**
+   * Files the page handed to an editor review, against whether it had taken
+   * them over first. Handing one over is a deliberate exit rather than a
+   * collision — the progress went with it — so the page stops answering for
+   * these entirely: no gesture reaches them, no row reads from them, and the
+   * drop an editor review would otherwise trigger has nothing left to do. The
+   * flag is what a failed handover is put back from.
+   */
+  private handed = new Map<string, boolean>();
 
   /** Replace the document. Ownership goes with it: this is a different read. */
   load(files: readonly ReviewFile[]): void {
     this.files = new Map(files.map((live) => [live.view.file, live]));
     this.taken.clear();
+    this.handed.clear();
   }
 
   clear(): void {
     this.files.clear();
     this.taken.clear();
+    this.handed.clear();
   }
 
   get size(): number {
@@ -149,6 +174,11 @@ export class ChangeSetReview {
   /** True once a gesture has landed on this file, making the page its surface. */
   owns(file: string): boolean {
     return this.taken.has(file);
+  }
+
+  /** True once this file went to an editor review, progress and all. */
+  handedOver(file: string): boolean {
+    return this.handed.has(file);
   }
 
   /**
@@ -200,6 +230,10 @@ export class ChangeSetReview {
     if (!live || !section || !state || state.outcome !== undefined) {
       return { kind: 'ignore' };
     }
+    // A file handed to an editor review is not this page's to move any more,
+    // and taking it back on a keystroke would undo a handover the reviewer
+    // asked for — with their own writing already in the file.
+    if (this.handed.has(gesture.file)) return { kind: 'ignore' };
     const spot = { file: gesture.file, index: gesture.index };
     const takesOver = !this.taken.has(gesture.file);
 
@@ -306,7 +340,10 @@ export class ChangeSetReview {
   dropFile(file: string): Outbound | undefined {
     const live = this.files.get(file);
     this.taken.delete(file);
-    if (!live) return undefined;
+    // The editor review of a file this page handed over is the one it asked
+    // for: the progress is already there, and owing these regions again would
+    // be the page taking back what it gave.
+    if (!live || this.handed.has(file)) return undefined;
     const started = live.states.some((state) => state.position > 0 || state.outcome);
     // A file already finished here is not work outstanding, it is a record of a
     // review that happened — and its baseline moved when it did. Owing its
@@ -315,6 +352,48 @@ export class ChangeSetReview {
     if (!started || finished) return undefined;
     live.states = live.sections.map(() => ({ position: 0, touched: false }));
     return { type: 'file', file, states: live.states };
+  }
+
+  /**
+   * Give this file to an editor review, carrying what the page covered: every
+   * region's position and outcome, and the region the reviewer asked from.
+   *
+   * The page stops being this file's surface, which is the point — the editor is
+   * where a reviewer writes their own code, and one surface owns a file at a
+   * time.
+   * What is different from every other way of losing a file is that nothing is
+   * given up: the seed is the page's progress, and the review that receives it
+   * starts where the reviewer stopped rather than at zero.
+   *
+   * Nothing here reaches an editor; the caller does that, and puts this back
+   * with `unhand` if it could not.
+   */
+  handOver(file: string, index: number): PageHandover | undefined {
+    const live = this.files.get(file);
+    if (!live || this.handed.has(file)) return undefined;
+    if (index < 0 || index >= live.sections.length) return undefined;
+    // A file every region of which is accounted for is a review that already
+    // happened here, and its baseline moved when it closed. There is no version
+    // of the change left to rewrite.
+    if (live.states.every((state) => state.outcome !== undefined)) return undefined;
+    this.handed.set(file, this.taken.has(file));
+    this.taken.delete(file);
+    return {
+      index,
+      sections: live.states.map((state) => ({
+        position: state.position,
+        touched: state.touched,
+        outcome: state.outcome,
+      })),
+    };
+  }
+
+  /** The handover did not happen: the page has this file back, as it was. */
+  unhand(file: string): void {
+    const was = this.handed.get(file);
+    if (was === undefined) return;
+    this.handed.delete(file);
+    if (was) this.taken.add(file);
   }
 
   /** The lines a gap is holding back, from the content the page is reviewing. */

@@ -150,6 +150,17 @@ button:focus-visible {
   color: var(--vscode-descriptionForeground);
 }
 
+/* A file handed to an editor review so the reviewer could write their own code
+   in it. Its regions stay drawn — this is still the document of the change set —
+   so the only thing to say is that they are not being read here any more. The
+   code itself keeps its own shading: owed against covered is what opacity says
+   on this page, and dimming a whole file would be saying something else with
+   the same voice. */
+.file.handed .file-head .path {
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+}
+
 /* --- code ----------------------------------------------------------------- */
 
 .code-block {

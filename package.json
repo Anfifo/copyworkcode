@@ -136,6 +136,11 @@
         "category": "CopyWorkCode"
       },
       {
+        "command": "copyworkcode.editOnPage",
+        "title": "Write Here Yourself (Change Set Page)",
+        "category": "CopyWorkCode"
+      },
+      {
         "command": "copyworkcode.resumeTyping",
         "title": "Back to Typing the Change",
         "category": "CopyWorkCode"
@@ -332,6 +337,10 @@
         {
           "command": "copyworkcode.resetReview",
           "when": "copyworkcode.reviewing"
+        },
+        {
+          "command": "copyworkcode.editOnPage",
+          "when": "false"
         }
       ]
     },
@@ -395,6 +404,11 @@
         "command": "copyworkcode.resumeTyping",
         "key": "ctrl+e",
         "when": "copyworkcode.reviewing && copyworkcode.editing && copyworkcode.reviewEditorFocused && editorTextFocus"
+      },
+      {
+        "command": "copyworkcode.editOnPage",
+        "key": "ctrl+e",
+        "when": "activeWebviewPanelId == 'copyworkcode.changeSet'"
       }
     ],
     "configuration": {

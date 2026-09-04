@@ -507,3 +507,122 @@ test('skipping walks the page file by file until nothing is owed', () => {
   assert.deepEqual(finished, ['/w/a.ts', '/w/b.ts', '/w/c.ts']);
   assert.equal(page.files().every((drawn) => drawn.classList.contains('done')), true);
 });
+
+// --- handing a file to an editor review -------------------------------------
+
+/** One region's lens controls, by their labels. */
+function lensLabels(region: FakeElement): string[] {
+  return (
+    region.querySelector('.lens')?.querySelectorAll('button').map((b) => b.textContent) ??
+    []
+  );
+}
+
+/** The lens control with this label, for a click. */
+function lensButton(region: FakeElement, label: string): FakeElement {
+  const button = region
+    .querySelector('.lens')
+    ?.querySelectorAll('button')
+    .find((b) => b.textContent === label);
+  assert.ok(button, `no "${label}" control on this region`);
+  return button;
+}
+
+test('the region being worked on offers to be written by hand', () => {
+  const { page } = pageWith(changedFile());
+  const region = page.regions(page.files()[0])[0];
+
+  assert.deepEqual(lensLabels(region), [
+    'Fill line (Alt+F)',
+    'Skip (Alt+S)',
+    'Write it yourself (Ctrl+E)',
+    'Open here',
+  ]);
+
+  page.click(lensButton(region, 'Write it yourself (Ctrl+E)'));
+
+  assert.deepEqual(lastSent(page), { type: 'editHere', file: '/w/a.ts', index: 0 });
+});
+
+test('a deletion can be written by hand too, though it has nothing to type', () => {
+  const { page } = pageWith(deletedLineFile('/w/b.ts'));
+  const region = page.regions(page.files()[0])[0];
+
+  assert.deepEqual(lensLabels(region), [
+    'Confirm (Enter)',
+    'Write it yourself (Ctrl+E)',
+    'Open here',
+  ]);
+});
+
+test('the key asks the page which region it meant', () => {
+  const { page } = pageWith(changedFile());
+
+  page.receive({ type: 'askEdit' });
+
+  assert.deepEqual(lastSent(page), { type: 'editHere', file: '/w/a.ts', index: 0 });
+});
+
+test('the key with nothing being worked on says so rather than guessing', () => {
+  const { page } = pageWith(changedFile());
+  page.receive({
+    type: 'section',
+    file: '/w/a.ts',
+    index: 0,
+    state: { position: 11, touched: true, outcome: 'typed' },
+  });
+  page.sent.length = 0;
+
+  page.receive({ type: 'askEdit' });
+
+  assert.deepEqual(page.sent, []);
+  assert.equal(
+    page.byId('status').textContent,
+    'no region is being worked on — click one first.'
+  );
+});
+
+test('a file that went to the editor says so, and stops taking keystrokes', () => {
+  const { page } = pageWith(changedFile('/w/a.ts'), changedFile('/w/b.ts'));
+
+  page.receive({ type: 'handed', file: '/w/a.ts' });
+
+  const [first, second] = page.files();
+  assert.equal(first.classList.contains('handed'), true);
+  assert.equal(first.querySelector('.progress')?.textContent, 'being reviewed in the editor');
+  // Its regions stay drawn — this is still the document of the change set — but
+  // nothing here types them, so the only controls left are ways of looking.
+  assert.deepEqual(lensLabels(page.regions(first)[0]), ['Open here']);
+
+  // The caret went to the next file's first region rather than nowhere.
+  assert.equal(page.regions(second)[0].classList.contains('active'), true);
+  page.sent.length = 0;
+  page.press('c');
+  assert.deepEqual(lastSent(page), { type: 'type', file: '/w/b.ts', index: 0, text: 'c' });
+});
+
+test('a handed-over file cannot be clicked back into', () => {
+  const { page } = pageWith(changedFile());
+  page.receive({ type: 'handed', file: '/w/a.ts' });
+  const region = page.regions(page.files()[0])[0];
+
+  page.click(region);
+
+  assert.equal(region.classList.contains('active'), false);
+  assert.equal(
+    page.byId('status').textContent,
+    'Nothing left to type here — the rest went to the editor.'
+  );
+});
+
+test('what a handed-over file covered stays drawn as covered', () => {
+  const { page, review } = pageWith(changedFile());
+  page.press('c');
+  page.press('h');
+  pump(page, review);
+
+  page.receive({ type: 'handed', file: '/w/a.ts' });
+
+  const line = page.regions(page.files()[0])[0];
+  assert.equal(added(line).map(row)[0].covered, 'ch');
+});

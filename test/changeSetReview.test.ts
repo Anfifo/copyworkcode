@@ -476,3 +476,113 @@ test('the page knows whether any row is reading from it', () => {
   typeAll(review, '/w/a.ts', 0, 'hanged 10');
   assert.equal(review.reported, false);
 });
+
+// --- giving a file to an editor review --------------------------------------
+
+test('a handover carries what was covered, and names the region asked from', () => {
+  const review = reviewOf(oneChange(), oneChange('/w/b.ts'));
+  typeAll(review, '/w/a.ts', 0, 'changed');
+  typeAll(review, '/w/b.ts', 0, 'chan');
+
+  const handover = review.handOver('/w/a.ts', 0);
+
+  assert.deepEqual(handover, {
+    index: 0,
+    sections: [{ position: 7, touched: true, outcome: undefined }],
+  });
+  // Only the file that changed hands changes: the rest of the page is still
+  // the page's, progress and all.
+  assert.equal(review.owns('/w/b.ts'), true);
+  assert.equal(stateOf(review, '/w/b.ts').position, 4);
+});
+
+test('a handed-over file stops being the page to answer for it', () => {
+  const review = reviewOf(oneChange());
+  typeAll(review, '/w/a.ts', 0, 'chan');
+  assert.deepEqual(review.progressFor('/w/a.ts'), { claimed: 0, total: 1 });
+
+  review.handOver('/w/a.ts', 0);
+
+  assert.equal(review.owns('/w/a.ts'), false);
+  assert.equal(review.handedOver('/w/a.ts'), true);
+  // The editor review holds this file's progress now, and the row reads from
+  // whichever surface holds it. Two readings of one file would be this page
+  // claiming something it gave away.
+  assert.equal(review.progressFor('/w/a.ts'), undefined);
+  assert.equal(review.reported, false);
+});
+
+test('a keystroke cannot take a handed-over file back', () => {
+  const review = reviewOf(oneChange());
+  typeAll(review, '/w/a.ts', 0, 'chan');
+  review.handOver('/w/a.ts', 0);
+
+  const resolution = review.resolve({
+    type: 'type',
+    file: '/w/a.ts',
+    index: 0,
+    text: 'g',
+  });
+
+  // Not a rejection either: the region is not saying no, the page simply has
+  // nothing to say about this file any more.
+  assert.deepEqual(resolution, { kind: 'ignore' });
+  assert.equal(stateOf(review, '/w/a.ts').position, 4);
+});
+
+test('the editor review starting does not take back what was handed to it', () => {
+  const review = reviewOf(oneChange());
+  typeAll(review, '/w/a.ts', 0, 'chan');
+  review.handOver('/w/a.ts', 0);
+
+  // The same call an editor review's start makes on any file. Owing these
+  // regions again would be the page undoing the handover it just made.
+  assert.equal(review.dropFile('/w/a.ts'), undefined);
+  assert.equal(stateOf(review, '/w/a.ts').position, 4);
+});
+
+test('a file whose regions are all accounted for has nothing left to hand over', () => {
+  const review = reviewOf(oneChange());
+  typeAll(review, '/w/a.ts', 0, 'changed 10');
+
+  // That review closed and its baseline moved with it. There is no version of
+  // the change left to rewrite.
+  assert.equal(review.handOver('/w/a.ts', 0), undefined);
+});
+
+test('a file the page never typed in hands over with nothing on it', () => {
+  const review = reviewOf(oneChange());
+
+  const handover = review.handOver('/w/a.ts', 0);
+
+  assert.deepEqual(handover, {
+    index: 0,
+    sections: [{ position: 0, touched: false, outcome: undefined }],
+  });
+  assert.equal(review.handedOver('/w/a.ts'), true);
+});
+
+test('a handover that did not happen leaves the page holding the file', () => {
+  const review = reviewOf(oneChange());
+  typeAll(review, '/w/a.ts', 0, 'chan');
+
+  review.handOver('/w/a.ts', 0);
+  review.unhand('/w/a.ts');
+
+  assert.equal(review.handedOver('/w/a.ts'), false);
+  assert.equal(review.owns('/w/a.ts'), true);
+  assert.deepEqual(review.progressFor('/w/a.ts'), { claimed: 0, total: 1 });
+  const { posts } = play(review, { type: 'type', file: '/w/a.ts', index: 0, text: 'g' });
+  assert.equal(posts.length, 1);
+});
+
+test('rebuilding the document takes every handed-over file back', () => {
+  const review = reviewOf(oneChange());
+  review.handOver('/w/a.ts', 0);
+
+  review.load([oneChange()]);
+
+  assert.equal(review.handedOver('/w/a.ts'), false);
+  const { posts } = play(review, { type: 'type', file: '/w/a.ts', index: 0, text: 'c' });
+  assert.equal(posts.length, 1);
+});

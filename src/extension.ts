@@ -58,6 +58,12 @@ export function activate(context: vscode.ExtensionContext): void {
       changeSet?.show()
     ),
 
+    // The same key the editor review takes the pen with, on the other surface.
+    // Which region it means is the page's to answer, so the command only asks.
+    vscode.commands.registerCommand('copyworkcode.editOnPage', () =>
+      changeSet?.editOnPage()
+    ),
+
     vscode.commands.registerCommand('copyworkcode.skipFile', (item?: { resourceUri?: vscode.Uri }) => {
       const file = item?.resourceUri?.fsPath;
       const root = workspaceData.workspaceRoot();
@@ -228,13 +234,21 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
   log = new ReviewLog(root);
   source = new DebtSource(root, context.workspaceState);
   retype = new RetypeController(log, source);
-  changeSet = new ChangeSetPanel(context.extensionUri, root, source, log, (file) =>
-    // The page is about to review this file itself, and one surface owns a file
-    // at a time — see changeSetPanel.ts.
-    retype?.forget(
-      file,
-      `review of ${path.basename(file)} ended — the change set page took it over.`
-    ) ?? Promise.resolve()
+  changeSet = new ChangeSetPanel(
+    context.extensionUri,
+    root,
+    source,
+    log,
+    (file) =>
+      // The page is about to review this file itself, and one surface owns a
+      // file at a time — see changeSetPanel.ts.
+      retype?.forget(
+        file,
+        `review of ${path.basename(file)} ended — the change set page took it over.`
+      ) ?? Promise.resolve(),
+    // The other direction: the page is giving a file up so the reviewer can
+    // write their own code in it, and what it covered goes along.
+    (file, handover) => retype?.adopt(root, file, handover) ?? Promise.resolve(false)
   );
   const decorations = new DebtDecorations(
     (file) => retype?.progressFor(file)?.paused === false

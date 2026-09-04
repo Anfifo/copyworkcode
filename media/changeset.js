@@ -28,6 +28,13 @@
   const drawn = new Map();
   /** The one region keystrokes go to: `{ file, index }`, or null. */
   let active = null;
+  /**
+   * Files that went to an editor review, so the reviewer could write their own
+   * code in them. Their regions stay drawn — this is still the document of the
+   * change set — but nothing here types them any more, and their progress went
+   * with them.
+   */
+  const handedFiles = new Set();
   /** Coarse token runs per line. Plain text if that script did not load, since
    * colour is an aid to reading the page and not a part of it. */
   const tokenize =
@@ -82,6 +89,33 @@
         updateStatus();
         return;
       }
+      case 'handed': {
+        // Gone to an editor review, with what this page covered. Not a loss and
+        // not a claim: the file is simply being read somewhere else now.
+        const file = byPath.get(message.file);
+        const parts = drawn.get(message.file);
+        if (!file || !parts) return;
+        handedFiles.add(message.file);
+        parts.root.classList.add('handed');
+        if (active && active.file === message.file) moveOn();
+        for (let i = 0; i < file.states.length; i++) paint(message.file, i);
+        updateFile(message.file);
+        updateStatus();
+        return;
+      }
+      case 'askEdit':
+        // The key was pressed rather than the button, so the region it meant is
+        // this page's to name.
+        if (active) {
+          vscode.postMessage({
+            type: 'editHere',
+            file: active.file,
+            index: active.index,
+          });
+        } else {
+          status.textContent = 'no region is being worked on — click one first.';
+        }
+        return;
       case 'gap':
         fillGap(message);
         return;
@@ -105,6 +139,7 @@
     doc.textContent = '';
     byPath.clear();
     drawn.clear();
+    handedFiles.clear();
     active = null;
     for (const file of payload.files) {
       byPath.set(file.file, file);
@@ -369,6 +404,17 @@
       lens.appendChild(span('outcome', state.outcome));
       return;
     }
+    if (handedFiles.has(file.file)) {
+      lens.appendChild(span('muted', 'in the editor'));
+      lens.appendChild(
+        action('secondary', 'Open here', {
+          type: 'openInEditor',
+          file: file.file,
+          line: section.line,
+        })
+      );
+      return;
+    }
     if (!live) {
       lens.appendChild(action('secondary', 'Start here', null, region));
       return;
@@ -400,6 +446,17 @@
         })
       );
     }
+    // The page types the change as written and nothing else, so a reviewer's
+    // own version is written where code is written: this hands the file to an
+    // editor review, at this region, with everything covered here still covered
+    // there.
+    lens.appendChild(
+      action('secondary', 'Write it yourself (Ctrl+E)', {
+        type: 'editHere',
+        file: file.file,
+        index: section.index,
+      })
+    );
     lens.appendChild(
       action('secondary', 'Open here', {
         type: 'openInEditor',
@@ -462,6 +519,7 @@
   function nextOwed(from) {
     const owed = [];
     for (const file of payload.files) {
+      if (handedFiles.has(file.file)) continue;
       for (let i = 0; i < file.states.length; i++) {
         if (!file.states[i].outcome) owed.push({ file: file.file, index: i });
       }
@@ -484,6 +542,7 @@
     if (!region) return;
     const index = Number(region.dataset.index);
     const file = byPath.get(region.dataset.file);
+    if (handedFiles.has(region.dataset.file)) return;
     if (file && !file.states[index].outcome) setActive(region.dataset.file, index);
   }
 
@@ -580,6 +639,11 @@
     const parts = drawn.get(file);
     const data = byPath.get(file);
     if (!parts || !data || parts.root.classList.contains('done')) return;
+    if (handedFiles.has(file)) {
+      parts.progress.textContent = 'being reviewed in the editor';
+      updateSummary();
+      return;
+    }
     const claimed = data.states.filter((state) => state.outcome).length;
     parts.progress.textContent =
       claimed === 0
@@ -620,7 +684,9 @@
       status.textContent =
         payload.files.length === 0
           ? ''
-          : 'Every region on this page is claimed.';
+          : handedFiles.size > 0
+            ? 'Nothing left to type here — the rest went to the editor.'
+            : 'Every region on this page is claimed.';
       return;
     }
     const file = byPath.get(active.file);

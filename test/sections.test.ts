@@ -10,6 +10,7 @@ import {
   outcomeCounts,
   remapSections,
   sectionAt,
+  seedSections,
   typedBoundary,
 } from '../src/core/sections';
 
@@ -451,4 +452,66 @@ test('the invariant survives a long run of arbitrary edits', () => {
     text = remap(sections, text, changes);
   }
   assert.ok(text.length > 0);
+});
+
+
+// --- taking another surface's progress --------------------------------------
+
+test('a seed puts back what another surface covered, region by region', () => {
+  const sections = buildSections('a\nb\nc\n', 'a\nCHANGED\nc\nADDED\n');
+  assert.equal(sections.length, 2);
+
+  const took = seedSections(sections, [
+    { position: 4, touched: true },
+    { position: 6, touched: false, outcome: 'skipped' },
+  ]);
+
+  assert.equal(took, true);
+  assert.deepEqual(
+    sections.map((s) => [s.position, s.touched, s.outcome]),
+    [
+      [4, true, undefined],
+      [6, false, 'skipped'],
+    ]
+  );
+});
+
+test('a position counted without carriage returns lands past them', () => {
+  // The page normalizes line endings and a buffer cannot, so a CRLF line is one
+  // character shorter there than here. Six normalized characters is
+  // o-n-e-break-t-w, which is seven characters of a target holding both halves
+  // of every break.
+  const sections = buildSections('', 'one\r\ntwo\r\n');
+  assert.equal(sections.length, 1);
+  assert.equal(sections[0].target, 'one\r\ntwo\r\n');
+
+  seedSections(sections, [{ position: 6, touched: true }]);
+
+  assert.equal(sections[0].position, 7);
+  assert.equal(sections[0].target.slice(0, 7), 'one\r\ntw');
+});
+
+test('a seed of the wrong shape is refused whole rather than fitted', () => {
+  // The file moved on since the other surface read it, so the seed's positions
+  // describe regions this set does not have. None of them is salvageable.
+  const sections = buildSections('a\nb\nc\n', 'a\nCHANGED\nc\nADDED\n');
+
+  const took = seedSections(sections, [{ position: 4, touched: true }]);
+
+  assert.equal(took, false);
+  assert.deepEqual(
+    sections.map((s) => [s.position, s.touched, s.outcome]),
+    [
+      [0, false, undefined],
+      [0, false, undefined],
+    ]
+  );
+});
+
+test('a seeded position never runs past the region it belongs to', () => {
+  const sections = buildSections('a\n', 'a\nADDED\n');
+
+  seedSections(sections, [{ position: 999, touched: true }]);
+
+  assert.equal(sections[0].position, sections[0].target.length);
 });

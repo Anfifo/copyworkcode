@@ -347,6 +347,9 @@ Writing your own code is a gesture you ask for: **Ctrl+E** (`copyworkcode.enable
   matters after a review is not how much of the agent's text was reproduced, but whether the
   file still says what the agent wrote.
 
+Ctrl+E on the change set page means the same thing by way of this: it starts a review here,
+already in the second state, carrying what that page had covered (see below).
+
 `copyworkcode.startEditing` (default off) opens every review in the second state instead of
 the first, for someone who mostly rewrites what the agent wrote: the file is theirs from the
 first keystroke and Ctrl+E is what turns guidance on. It changes the input mode and nothing
@@ -678,6 +681,46 @@ What the page can do that a buffer cannot, and what it cannot:
   "open in editor" sits on every file heading and on the region being worked on, and starts no
   review of its own.
 
+**Writing your own code goes to the editor, and takes your place with it.** The page types
+the change as written and offers no other way to produce text, so the gesture the editor
+review answers with Ctrl+E — the reviewer disagrees, and writes their own version — is
+answered here by handing the file over: the same key, and the button beside the fills, start
+an editor review of that file at that region with the editor already in the reviewer's hands.
+
+It is delegation rather than a second implementation because the alternative was a worse
+version of something that already exists. A rewrite on the page would need a write path in a
+surface whose whole claim is that it has none, a text box with no indentation, no bracket
+matching and no completions, and an answer for what a changed region does to the snapshot the
+rest of the document is drawn from. The editor has the first two settled and does not have the
+third problem at all: it reviews a live buffer and reconciles every edit that lands in it. And
+an editor is where anyone would rather write code, which is the whole reason the page says "no
+language features" out loud rather than pretending otherwise.
+
+What crosses with the file is the progress. Both surfaces build their regions with
+`buildSections`, so a seed is the page's states in region order, and the review that receives
+it starts where the reviewer stopped instead of at zero — the regions they typed out here are
+claimed there, in the same order, with the same outcomes. Positions are re-counted on the way:
+the page holds them in normalized text and a buffer holds the file's own endings, so a CRLF
+break is one character on one side and two on the other. A seed of the wrong *shape* is refused
+whole rather than fitted, because a file that gained or lost a region since the page read it
+has moved somewhere the page's positions do not describe, and half-placed progress is worse
+than none.
+
+The seed only applies where there is nothing better. A review of that file that already
+exists — live, or parked from an earlier visit — is the surface that has been holding it, and
+its positions account for every edit since; the page's copy is a reading of the file as it
+stood when the page opened. So an existing review is resumed and merely handed over, and the
+seed is kept for what it was built for: a file the page is the only surface with progress on.
+
+Handing a file over is a deliberate exit, not the collision the ownership rule covers, and the
+page treats it as one. The file stops being the page's — no gesture reaches it, and the queue
+row reads from the editor review, which is now the surface with its progress — but its regions
+stay drawn, with what was covered still shown as covered, because this is still the document
+of the change set and the reader may still want to read it there. What the page will not do is
+take it back on a keystroke: the reviewer asked for the editor, their own writing is already in
+the file, and a stray key undoing that would be the surface contradicting the gesture it was
+given. Reloading the page is how a file comes back, being a fresh read of everything.
+
 The document the page draws is line-ending normalized, which the buffer review cannot be. A
 matched keystroke in an editor has to leave the file's own endings alone; a page writes code
 into text nodes, where a carriage return is a line break in its own right and one left in
@@ -721,9 +764,13 @@ structure. Files whose content must not be copied never reach it either — the 
 from the queue, which is where they are already refused.
 
 Keys are the editor review's wherever the editor review has one. Tab fills a word, Alt+F a
-line, Alt+S skips the region, Alt+J brings the caret back into view, and Enter is a line break
-— or, on a deletion, the acknowledgement, since there is nothing there to type. Every other key
-scrolls the page.
+line, Alt+S skips the region, Alt+J brings the caret back into view, Ctrl+E hands the file to
+an editor review so the region can be written by hand, and Enter is a line break — or, on a
+deletion, the acknowledgement, since there is nothing there to type. Every other key scrolls
+the page. Ctrl+E is a contributed keybinding like the rest, scoped to the page's own panel so
+Quick Open keeps it everywhere else, and it is a *question* rather than an instruction: the
+page holds the caret, so the command asks which region is being worked on and the page answers
+with it.
 
 ### Retype matching rules
 

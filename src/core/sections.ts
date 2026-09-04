@@ -68,6 +68,58 @@ export interface Section {
   outcome?: SectionOutcome;
 }
 
+/**
+ * One region's progress as another surface holds it, for seeding a fresh
+ * section set with it. Positions count characters into the region's target
+ * with line endings normalized, which is how the change set page counts them —
+ * `seedSections` puts them back into the buffer's own endings.
+ */
+export interface SectionSeed {
+  position: number;
+  touched: boolean;
+  outcome?: SectionOutcome;
+}
+
+/**
+ * Give a freshly built section set the progress another surface already made on
+ * it, so handing a file from one review surface to the other keeps what was
+ * covered instead of asking for it again.
+ *
+ * Answers whether the seed was usable. Both surfaces build their sections from
+ * the same diff, so a seed matches one for one — but the file may have changed
+ * since the other surface read it, and a seed of a different shape describes
+ * regions that no longer exist. There is nothing sensible to do with a position
+ * whose region moved, so the whole seed is refused and the review starts from
+ * zero, which is the honest reading of a file that changed under it.
+ */
+export function seedSections(
+  sections: Section[],
+  seed: readonly SectionSeed[]
+): boolean {
+  if (seed.length !== sections.length) return false;
+  for (let i = 0; i < sections.length; i++) {
+    const section = sections[i];
+    section.position = rawPosition(section.target, seed[i].position);
+    section.touched = seed[i].touched;
+    section.outcome = seed[i].outcome;
+  }
+  return true;
+}
+
+/**
+ * Where a position counted in normalized text lands in text holding the file's
+ * own line endings. Only a CRLF pair differs — one character to the surface
+ * that normalized it, two to the buffer — so the walk is over line breaks and
+ * nothing else.
+ */
+function rawPosition(target: string, position: number): number {
+  let raw = 0;
+  for (let n = 0; n < position && raw < target.length; n++) {
+    raw += target[raw] === '\r' && target[raw + 1] === '\n' ? 2 : 1;
+  }
+  return Math.min(raw, target.length);
+}
+
 /** One replacement in a document: `[from, to)` becomes `text`. */
 export interface TextChange {
   from: number;
