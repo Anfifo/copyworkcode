@@ -36,6 +36,9 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
   readonly onDidChangeTreeData = this.emitter.event;
   /** Rows of the last computed list, for the item builder to read back. */
   private rows = new Map<string, DebtRow>();
+  /** Filenames the queue is showing more than once, so those rows can name
+   * their folder and the rest can stay short. */
+  private ambiguous = new Set<string>();
   private view?: vscode.TreeView<string>;
 
   constructor(
@@ -60,6 +63,7 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
     if (element) return [];
     const rows = this.source.rows();
     this.rows = new Map(rows.map((row) => [row.file, row]));
+    this.ambiguous = duplicateNames(rows.map((row) => row.file));
     this.updateHeader(rows.length);
     // The rows are diffed here anyway; handing them on is what keeps the
     // filename tint from having to recompute the whole queue for itself.
@@ -77,16 +81,23 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
     const item = new vscode.TreeItem(path.basename(file));
     item.resourceUri = vscode.Uri.file(file);
 
+    // The row says what changed and, while something is reviewing it, how far
+    // that has got. Everything else — the edit count, the full path — is in the
+    // tooltip, which is where a fact someone goes looking for belongs. A
+    // description is read at a glance down a column of rows in a panel usually
+    // docked narrow, so each thing on it costs the others their room.
     const bits = [`+${added} −${removed}`];
     if (progress) {
       // Two of the three states are already the word the row wants.
       const where = progress.state === 'page' ? 'on the page' : progress.state;
       bits.push(`${where} ${progress.claimed}/${progress.total}`);
     }
-    if (events > 0) {
-      bits.push(`${events} edit(s)`);
-    }
-    bits.push(relativeDir(this.root, file));
+    // The folder earns its place only when the filename does not settle which
+    // file this is — the same rule the workbench applies to its editor tabs.
+    const dir = this.ambiguous.has(path.basename(file))
+      ? relativeDir(this.root, file)
+      : '';
+    if (dir) bits.push(dir);
     item.description = bits.join(' · ');
 
     item.tooltip = this.tooltip(file, added, removed, events, progress, row);
@@ -225,7 +236,20 @@ export class DebtDecorations
   }
 }
 
+/** Filenames more than one row in the queue is using, so only those rows have
+ * to say which folder they came from. */
+function duplicateNames(files: readonly string[]): Set<string> {
+  const seen = new Set<string>();
+  const twice = new Set<string>();
+  for (const file of files) {
+    const name = path.basename(file);
+    if (seen.has(name)) twice.add(name);
+    seen.add(name);
+  }
+  return twice;
+}
+
+/** The folder a file sits in, workspace-relative — empty at the root itself. */
 function relativeDir(root: string, file: string): string {
-  const dir = path.relative(root, path.dirname(file)).replace(/\\/g, '/');
-  return dir.length > 0 ? dir : '.';
+  return path.relative(root, path.dirname(file)).replace(/\\/g, '/');
 }

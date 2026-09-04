@@ -548,8 +548,17 @@ commands, so anyone who wants them — or wants them on different keys — has t
 
 One row per file waiting for review, in the extension's own activity-bar panel, biggest change
 first — change size is what a reviewer picks by, so it leads the row: `+12 −3`, then the
-review's coverage if one is live there, then how many agent edits are behind it, then the
-directory. The file-icon theme keeps the icon, so a row still reads as the kind of file it is.
+review's coverage if one is live there. The file-icon theme keeps the icon, so a row still
+reads as the kind of file it is.
+
+**The row says two things, and the tooltip says the rest.** It used to carry the edit count and
+the directory as well, four facts deep in middle dots, in a panel usually docked narrow enough
+to elide the end of them. A description is read at a glance across a column of rows; a fact you
+go looking for belongs in the tooltip, which has the full relative path, the edit count and the
+line counts spelled out. The directory comes back to the row in the one case where the filename
+does not settle which file this is: two rows sharing a name, which is the same rule the
+workbench applies to its own editor tabs. A file at the workspace root prints no directory at
+all, rather than the `.` an earlier version showed, which read as a stray dot after the counts.
 
 **Colour in the panel means one thing: this file is being reviewed right now.** The row under
 review has its filename tinted (`list.warningForeground`, the workbench's own list yellow, so
