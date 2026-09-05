@@ -6,6 +6,7 @@ import {
   buildSections,
   claimedCount,
   enclosingSection,
+  nearestUnclaimed,
   nextUnclaimed,
   outcomeCounts,
   remapSections,
@@ -361,6 +362,24 @@ test('sectionAt finds the unclaimed section under the cursor', () => {
     undefined,
     'a claimed section stops being the active one'
   );
+});
+
+test('nearestUnclaimed picks the closest open section, ahead on a tie', () => {
+  const sections = buildSections('a\nb\nc\nd\n', 'a\nnew1\nb\nc\nnew2\nd\n');
+  const [first, second] = sections;
+  assert.equal(nearestUnclaimed(sections, 0), first, 'context before the first');
+  assert.equal(nearestUnclaimed(sections, first.start + 1), first, 'inside is distance zero');
+  assert.equal(nearestUnclaimed(sections, second.end + 2), second, 'context after the last');
+  // 'b\nc\n' sits between them; the midpoint is equally far from both.
+  const gap = second.start - first.end;
+  assert.equal(gap % 2, 0);
+  assert.equal(nearestUnclaimed(sections, first.end + gap / 2), second, 'tie goes ahead');
+  assert.equal(nearestUnclaimed(sections, first.end + gap / 2 - 1), first);
+
+  first.outcome = 'typed';
+  assert.equal(nearestUnclaimed(sections, 0), second, 'a claimed section is not a place');
+  second.free = true;
+  assert.equal(nearestUnclaimed(sections, 0), undefined, 'nor is one with nothing left');
 });
 
 test('sectionAt prefers the section a boundary offset starts', () => {

@@ -64,8 +64,9 @@ export function activate(context: vscode.ExtensionContext): void {
       changeSet?.editOnPage()
     ),
 
-    vscode.commands.registerCommand('copyworkcode.skipFile', (item?: { resourceUri?: vscode.Uri }) => {
-      const file = item?.resourceUri?.fsPath;
+    // Both row commands arrive with the tree's element, which is the file path
+    // itself, not the item built from it.
+    vscode.commands.registerCommand('copyworkcode.skipFile', (file?: string) => {
       const root = workspaceData.workspaceRoot();
       if (!file || !root || !source) return;
       // Skipping from the view acknowledges what the view is showing, so it
@@ -74,10 +75,8 @@ export function activate(context: vscode.ExtensionContext): void {
       tree?.refresh();
     }),
 
-    vscode.commands.registerCommand(
-      'copyworkcode.resetReview',
-      (item?: { resourceUri?: vscode.Uri }) =>
-        retype?.resetReview(item?.resourceUri?.fsPath)
+    vscode.commands.registerCommand('copyworkcode.resetReview', (file?: string) =>
+      retype?.resetReview(file)
     ),
 
     vscode.commands.registerCommand('copyworkcode.useGitBaseline', () =>

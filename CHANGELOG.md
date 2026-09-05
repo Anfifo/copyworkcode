@@ -4,6 +4,19 @@ Notable changes to CopyWorkCode. Versions follow [semantic versioning](https://s
 
 ## [Unreleased]
 
+### Review
+
+- **Typographic punctuation takes any punctuation key.** An em dash, a curly quote or an
+  ellipsis is matched by `-`, `'` or `.`, or any other punctuation key, since no keyboard has
+  a key for them. The file keeps its own character; only the match is lenient.
+- **Typing outside a section moves the caret to the nearest one** instead of surfacing the
+  editor's "cannot edit in read-only editor" message. The key is then judged there.
+
+### Fixed
+
+- The checkmark on a queue row, and the row's right-click "Mark Reviewed Without Typing" and
+  "Reset Current Review", did nothing. The commands were reading the row the wrong way.
+
 ## [0.0.1]
 
 First release. The review loop works end to end.

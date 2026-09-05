@@ -351,6 +351,30 @@ export function nextUnclaimed(
   return open.find((s) => s.start >= offset) ?? open[0];
 }
 
+/**
+ * The unclaimed section closest to `offset` — where a keystroke aimed at
+ * nothing the review is guiding is taken. Distance is to the section's span,
+ * so a caret inside one is at distance zero; a tie between one behind and one
+ * ahead goes to the one ahead, the reading direction. A section with nothing
+ * left to match is not a place typing could go, and is not a candidate.
+ */
+export function nearestUnclaimed(
+  sections: readonly Section[],
+  offset: number
+): Section | undefined {
+  let best: Section | undefined;
+  let bestDistance = Infinity;
+  for (const s of [...sections].sort((a, b) => a.start - b.start)) {
+    if (isClaimed(s) || s.free) continue;
+    const distance = Math.max(s.start - offset, offset - s.end, 0);
+    if (distance <= bestDistance) {
+      best = s;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
 function blank(
   base: Pick<
     Section,

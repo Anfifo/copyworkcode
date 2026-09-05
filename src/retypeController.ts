@@ -11,6 +11,7 @@ import {
   claimedCount,
   enclosingSection,
   isClaimed,
+  nearestUnclaimed,
   nextUnclaimed,
   outcomeCounts,
   remapSections,
@@ -702,7 +703,12 @@ export class RetypeController implements vscode.Disposable {
   }
 
   private async handleType(args: { text: string }): Promise<void> {
-    const focus = this.focus();
+    let focus = this.focus();
+    let moved = false;
+    if (!focus?.guided && this.aimAtNearest()) {
+      focus = this.focus();
+      moved = true;
+    }
     if (!focus || !focus.guided) {
       // A deletion is a section with nothing in it to reproduce, and a review
       // opens on the first section in file order — so a file whose first change
@@ -726,13 +732,44 @@ export class RetypeController implements vscode.Disposable {
     const from = engine.position;
 
     if (engine.handleInput(args.text ?? '').kind === 'reject') {
-      this.reject(section);
+      this.reject(section, moved);
       return;
     }
     section.position = engine.position;
     section.touched = true;
     this.animateRun(section, from, engine.position, 'strike');
     await this.settle(section);
+  }
+
+  /**
+   * Take a keystroke that landed outside anything the review is guiding to the
+   * nearest section still owed, and say whether it did. While guidance is
+   * armed the file is read-only, so a key pressed with the caret in context,
+   * or in a section already claimed, has nowhere to go: handed to the editor,
+   * it came back as "cannot edit in read-only editor" — a true statement about
+   * the buffer, from a surface that knows nothing about the review, and the
+   * loudest moment a review had whenever the caret drifted a line off the
+   * change. The review answers instead by moving the caret to the closest
+   * place typing could go, and the keystroke is then judged there like any
+   * other: a match counts, a wrong key flashes. Moving on a wrong key is the
+   * point — the gesture said "I want to type", and where is the review's to
+   * answer even when the key is not.
+   *
+   * A selection or a second caret is left alone, as `focus` leaves it: a
+   * gesture about the file, not about the one character a section is waiting
+   * for.
+   */
+  private aimAtNearest(): boolean {
+    const s = this.session;
+    const editor = vscode.window.activeTextEditor;
+    if (!s || s.editing || !editor || editor.document !== s.document) return false;
+    if (!editor.selection.isEmpty || editor.selections.length !== 1) return false;
+    const cursor = s.document.offsetAt(editor.selection.active);
+    const section = nearestUnclaimed(s.sections, cursor);
+    if (!section) return false;
+    s.active = section;
+    this.moveCursorTo(typedBoundary(section));
+    return true;
   }
 
   /**
@@ -743,9 +780,13 @@ export class RetypeController implements vscode.Disposable {
    * is the flash, and the key that hands them the editor — the moment a wrong
    * key fires is exactly when they want to be told about it.
    */
-  private reject(section: Section): void {
+  private reject(section: Section, moved = false): void {
     this.flashMismatch(section);
-    this.updateUi('wrong key — Ctrl+E to write here');
+    this.updateUi(
+      moved
+        ? 'moved to the nearest section — wrong key; Ctrl+E to write here'
+        : 'wrong key — Ctrl+E to write here'
+    );
   }
 
   /**
@@ -848,11 +889,14 @@ export class RetypeController implements vscode.Disposable {
   }
 
   /** Enter is dispatched as an editor command, not `type` input, so it is
-   * rebound while guidance is on to route through the engine and snap the
-   * target's whitespace. Everywhere else it keeps its normal behaviour. */
+   * rebound while guidance is armed to route through the engine and snap the
+   * target's whitespace — and, like any other key, to be taken to the nearest
+   * section when it lands outside one. Everywhere else it keeps its normal
+   * behaviour. */
   typeEnter(): Promise<void> {
     return this.serialize(async () => {
-      if (!this.focus()?.guided) {
+      const s = this.session;
+      if (!s || s.editing || vscode.window.activeTextEditor?.document !== s.document) {
         await vscode.commands.executeCommand('default:type', { text: '\n' });
         return;
       }
@@ -1511,11 +1555,11 @@ export class RetypeController implements vscode.Disposable {
    * take the caret to where the typing goes and be ready for the next key.
    *
    * What is left is the dimmed run against everything else. Inside it, typing
-   * is matched; anywhere else, while guidance is armed, typing is inert — the
-   * override hands the keystroke back and the read-only flag catches it — and
-   * the way to write there is Ctrl+E, which stands guidance down wholesale. A
-   * selection or a second cursor is a gesture about the file, not about the one
-   * character a section is waiting for, and is left alone either way.
+   * is matched; anywhere else, while guidance is armed, a keystroke is taken to
+   * the nearest section still owed (see `aimAtNearest`), and the way to write
+   * there is Ctrl+E, which stands guidance down wholesale. A selection or a
+   * second cursor is a gesture about the file, not about the one character a
+   * section is waiting for, and is left alone either way.
    */
   private focus(): Focus | undefined {
     const s = this.session;

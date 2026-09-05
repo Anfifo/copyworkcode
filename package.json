@@ -391,7 +391,7 @@
       {
         "command": "copyworkcode.typeEnter",
         "key": "enter",
-        "when": "copyworkcode.guided && editorTextFocus && !suggestWidgetVisible"
+        "when": "copyworkcode.reviewing && !copyworkcode.editing && copyworkcode.reviewEditorFocused && editorTextFocus && !suggestWidgetVisible"
       },
       {
         "command": "copyworkcode.confirmSection",

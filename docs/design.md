@@ -469,6 +469,21 @@ section while armed; reading elsewhere, and writing anywhere, are both a click o
 away. A selection or a second cursor is a gesture about the file rather than about the one
 character a section is waiting for, and is left alone either way.
 
+**A keystroke outside every section goes to the nearest one still owed.** With guidance armed
+the file is read-only, so a key pressed with the caret in context, or in a section already
+claimed, has nowhere to land. Handed to the editor, it came back as the workbench's "cannot
+edit in read-only editor" — a true statement about the buffer, from a surface that knows
+nothing about the review, and the thing a reviewer met most often, since the caret drifts a
+line off the change as easily as onto it. It read as the file being locked, not as the review
+waiting. The review answers instead: the caret moves to the typing position of the closest
+section that still owes something (a deletion counts, and is answered with "Enter confirms"),
+and the key is then judged there like any other — a match counts, a wrong key flashes and says
+the caret was moved. Moving on a wrong key is deliberate: the gesture said "I want to type",
+and where is the review's to answer even when the key is not. Enter is routed the same way,
+so no printable key reaches the read-only check while the review's editor is armed. What still
+does is a paste or a selection typed over, which are gestures about the file rather than about
+a character, and Ctrl+E remains the answer for those.
+
 Ordered walking survives as the default *motion*, not as a rule: claiming a section walks the
 cursor to the next one still owed, wrapping at the end, so someone who just keeps typing is
 led straight through the file and never has to ask for the next section. Clicking anywhere
@@ -805,6 +820,16 @@ Typing in a real buffer means the editor itself modifies text the user didn't ty
 - **Trailing whitespace is absorbed.** When only whitespace remains in a section, the last
   accepted keystroke completes it — otherwise every section would end on an invisible pending
   newline the user has to guess at.
+- **Typographic punctuation takes any punctuation key.** An em dash, an en dash, a curly
+  quote, an ellipsis, an arrow: an assistant writes these freely, and a standard keyboard has
+  no key for any of them. Demanding the exact code point turned a review into a hunt for an
+  input method, and gained nothing, because a matched keystroke inserts nothing — the file
+  keeps the character it had whichever key stood in for it. So any punctuation or symbol
+  keystroke matches a punctuation or symbol character outside ASCII. Letters and digits are
+  never stood in for, in any script, and ASCII punctuation still wants itself: `-` for `—` is
+  the concession, `.` for `,` is a slip. A fixed table of lookalikes was the alternative, and
+  was rejected for the same reason the strictness dial was: every glyph it missed would be a
+  fresh wall, and the list is never complete.
 - **Multi-character input is not a match.** A paste, an input-method commit, or a completion
   arriving as one `type` call cannot stand in for typing, so an armed review rejects it and
   inserts nothing. Pasting is available with editing enabled, where it is the editor's own

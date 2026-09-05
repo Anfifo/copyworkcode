@@ -61,6 +61,35 @@ test('multi-character input (paste, completion) is rejected', () => {
   assert.equal(engine.position, 0);
 });
 
+test('any punctuation key stands in for typographic punctuation', () => {
+  // Em dash, curly quotes, ellipsis: none has a key on a standard keyboard.
+  const engine = new RetypeEngine('a \u2014 \u201Cb\u201D\u2026');
+  engine.handleInput('a');
+  assert.deepEqual(engine.handleInput('-'), { kind: 'insert', text: ' \u2014' });
+  assert.deepEqual(engine.handleInput('"'), { kind: 'insert', text: ' \u201C' });
+  engine.handleInput('b');
+  // Any punctuation, not only the lookalike: the file keeps its own character.
+  assert.deepEqual(engine.handleInput('.'), { kind: 'insert', text: '\u201D' });
+  assert.deepEqual(engine.handleInput(','), { kind: 'insert', text: '\u2026' });
+  assert.equal(engine.done, true);
+});
+
+test('a stand-in advances past an astral symbol whole', () => {
+  const engine = new RetypeEngine('\u{1F389}!');
+  assert.deepEqual(engine.handleInput('*'), { kind: 'insert', text: '\u{1F389}' });
+  assert.deepEqual(engine.handleInput('!'), { kind: 'insert', text: '!' });
+  assert.equal(engine.done, true);
+});
+
+test('letters and ASCII punctuation are never stood in for', () => {
+  const engine = new RetypeEngine('\u00E9-');
+  assert.deepEqual(engine.handleInput('e'), { kind: 'reject' }, 'accented letter');
+  assert.deepEqual(engine.handleInput('-'), { kind: 'reject' }, 'punctuation for a letter');
+  engine.handleInput('\u00E9');
+  assert.deepEqual(engine.handleInput('.'), { kind: 'reject' }, 'ASCII wants itself');
+  assert.deepEqual(engine.handleInput('-'), { kind: 'insert', text: '-' });
+});
+
 test('input after completion is rejected', () => {
   const engine = new RetypeEngine('a');
   engine.handleInput('a');

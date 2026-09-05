@@ -16,6 +16,10 @@
  *   ordinary editor. Without the cap a single key could carry the reviewer
  *   over a paragraph break, which is a jump they didn't ask for in a flow
  *   whose whole point is that the change goes past them one piece at a time.
+ * - Typographic punctuation takes any punctuation key. An em dash, a curly
+ *   quote, an ellipsis or an arrow has no key on a standard keyboard, so any
+ *   punctuation or symbol keystroke stands in for one. Letters and digits are
+ *   never stood in for, in any script.
  */
 
 export type InputResult =
@@ -66,15 +70,15 @@ export class RetypeEngine {
       return { kind: 'reject' };
     }
 
-    const expected = this.target.slice(
-      this.pos + snap.length,
-      this.pos + snap.length + typed.length
-    );
-    if (expected !== typed) {
+    const at = this.pos + snap.length;
+    const expected = codePointAt(this.target, at);
+    if (expected !== typed && !standsIn(typed, expected)) {
       return { kind: 'reject' };
     }
-    this.pos += snap.length + typed.length;
-    return { kind: 'insert', text: this.absorbTrailingWhitespace(snap + typed) };
+    // The target's own character is what is produced, whichever key stood in
+    // for it, so a stand-in never changes the text.
+    this.pos = at + expected.length;
+    return { kind: 'insert', text: this.absorbTrailingWhitespace(snap + expected) };
   }
 
   /**
@@ -185,4 +189,32 @@ function isWordChar(char: string | undefined): boolean {
 
 function isSymbol(char: string | undefined): boolean {
   return char !== undefined && !/\s/.test(char) && !isWordChar(char);
+}
+
+/** The whole code point at `at`, or '' past the end. */
+function codePointAt(text: string, at: number): string {
+  const code = text.codePointAt(at);
+  return code === undefined ? '' : String.fromCodePoint(code);
+}
+
+const PUNCTUATION = /^[\p{P}\p{S}]$/u;
+
+/**
+ * Whether a keystroke may stand in for a character it does not equal. Only
+ * for punctuation and symbols outside ASCII — the em dash, the curly quote,
+ * the ellipsis, the arrow — which a standard keyboard has no key for and an
+ * assistant writes freely. Demanding the exact code point would turn a
+ * review into a hunt for an input method, and would gain nothing: a matched
+ * keystroke inserts nothing, so the file keeps the character it had either
+ * way. Any punctuation or symbol key stands in, so the reviewer reads the
+ * character and presses the nearest thing.
+ */
+function standsIn(typed: string, expected: string): boolean {
+  const code = expected.codePointAt(0);
+  return (
+    code !== undefined &&
+    code > 0x7f &&
+    PUNCTUATION.test(expected) &&
+    PUNCTUATION.test(typed)
+  );
 }
