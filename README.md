@@ -58,6 +58,12 @@ While **guidance is armed**, the editor is read-only for the session. A key that
 inserts nothing, and neither does a stray paste, a backspace, an undo, or another extension's
 edit. A mistyped character can't quietly rewrite the code you're reading.
 
+Typing with the caret outside a section moves it to the nearest one still owed and judges the
+key there, and Backspace after a wrong key has nothing to take back, so the status bar says so
+rather than the editor refusing. Punctuation the AI writes that has no key on your keyboard
+(em dashes, curly quotes, ellipses) is matched by any punctuation key; the file keeps its own
+character.
+
 **Ctrl+E** hands the editor over: write, erase, paste and reformat, with completions and
 auto-close back. **Ctrl+E** again arms guidance and puts the caret back where the section left
 off. Neither direction loses progress, and anything you changed by hand is recorded as yours
@@ -68,6 +74,7 @@ rather than the AI's.
 | Key | Does |
 | --- | --- |
 | *any character* | Type the next character of the section |
+| *any punctuation* | Stand in for an em dash, a curly quote, or any typographic character |
 | <kbd>Tab</kbd> or <kbd>&rarr;</kbd> | Fill the next word |
 | <kbd>Alt</kbd>+<kbd>F</kbd> | Fill the rest of the line |
 | <kbd>Alt</kbd>+<kbd>S</kbd> | Skip the section |

@@ -2,7 +2,7 @@
   "name": "copyworkcode",
   "displayName": "CopyWorkCode",
   "description": "Review AI-generated code changes by typing them yourself.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "Anfifo",
   "license": "MIT",
   "repository": {
@@ -392,6 +392,11 @@
         "command": "copyworkcode.typeEnter",
         "key": "enter",
         "when": "copyworkcode.reviewing && !copyworkcode.editing && copyworkcode.reviewEditorFocused && editorTextFocus && !suggestWidgetVisible"
+      },
+      {
+        "command": "copyworkcode.typeBackspace",
+        "key": "backspace",
+        "when": "copyworkcode.reviewing && !copyworkcode.editing && copyworkcode.reviewEditorFocused && editorTextFocus"
       },
       {
         "command": "copyworkcode.confirmSection",

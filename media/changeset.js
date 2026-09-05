@@ -585,6 +585,13 @@
       }
       return;
     }
+    if (event.key === 'Backspace') {
+      // The reflex after a wrong key. Nothing landed, so there is nothing to
+      // take back, and the page says so rather than scrolling.
+      event.preventDefault();
+      status.textContent = 'nothing to erase — a wrong key changes nothing here.';
+      return;
+    }
     if (!active) return;
     const section = sectionAt(active);
     if (!section) return;

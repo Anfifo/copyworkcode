@@ -453,6 +453,16 @@ test('code goes into the page as text, never as markup', () => {
   assert.equal(row(added(region)[0]).owed, '<script>alert(1)</script>');
 });
 
+test('backspace erases nothing, and says so', () => {
+  const { page } = pageWith(changedFile());
+
+  const pressed = page.press('Backspace');
+
+  assert.equal(pressed.defaultPrevented, true);
+  assert.deepEqual(page.sent, []);
+  assert.match(page.byId('status').textContent, /nothing to erase/);
+});
+
 // --- the page against the real review state ---------------------------------
 
 test('typing a region through to the end claims it and finishes its file', () => {

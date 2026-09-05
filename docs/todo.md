@@ -11,10 +11,12 @@ promoted here when they're deemed worth building.
       testable by living with it. Expect matching-rule and pacing tweaks to fall out.
       Two things to watch specifically. Whether losing the ordered walk costs anything real
       now that coverage is the only guarantee — the fallback for that one is recorded in
-      brainstorm.md. And whether an armed review's read-only editor reads as protection or
-      as an obstruction: the wrong-key case it exists for is fixed, but every other way of
-      touching the file now goes through Ctrl+E first, and only use will say whether that
-      is one keystroke too many.
+      brainstorm.md. And whether an armed review's read-only editor still reads as an
+      obstruction now that a keystroke outside a section, and Backspace after a wrong one,
+      are answered by the review rather than by the editor's read-only message, which was
+      the case that made it read as locked. Every other way of touching the file still
+      goes through Ctrl+E first, and only use will say whether that is one keystroke too
+      many.
       A third thing to look at, this one only checkable by eye: the removal mark and the
       hover behind it. The first pass answered the loudest questions — the count left the
       right margin for the gutter and the lens, the rule left replacements, and the whole

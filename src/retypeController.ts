@@ -905,6 +905,25 @@ export class RetypeController implements vscode.Disposable {
   }
 
   /**
+   * Backspace is the reflex after a wrong key, and while guidance is armed it
+   * met the same read-only message a stray printable key used to: the
+   * workbench refusing an erase the review had already made unnecessary. The
+   * review answers instead — a wrong key inserted nothing, so there is nothing
+   * to take back — and leaves the offer of the editor where it always is.
+   * Anywhere else the key erases as it normally does.
+   */
+  typeBackspace(): Promise<void> {
+    return this.serialize(async () => {
+      const s = this.session;
+      if (!s || s.editing || vscode.window.activeTextEditor?.document !== s.document) {
+        await vscode.commands.executeCommand('deleteLeft');
+        return;
+      }
+      this.updateUi('nothing to erase — a wrong key inserts nothing; Ctrl+E to write here');
+    });
+  }
+
+  /**
    * Fill in the next word instead of typing it: the pending whitespace plus a
    * run of identifier characters, or a run of adjacent symbols. Bound to Tab,
    * and to the right arrow — where there is nowhere useful to move anyway,

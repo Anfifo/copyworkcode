@@ -126,9 +126,8 @@ export async function run(): Promise<void> {
   assert.equal(reviews()[1].outcome, 'skipped');
 
   // --- Skip a whole file from the tree --------------------------------------
-  await exec('copyworkcode.skipFile', {
-    resourceUri: vscode.Uri.file(file('skipfile.ts')),
-  });
+  // The tree hands its commands the row's element, which is the path itself.
+  await exec('copyworkcode.skipFile', file('skipfile.ts'));
   await settle();
   assert.equal(baselineOf('skipfile.ts'), 'x\ny\n');
   assert.equal(reviews()[2].outcome, 'skipped');

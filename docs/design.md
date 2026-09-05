@@ -470,9 +470,11 @@ section that still owes something (a deletion counts, and is answered with "Ente
 and the key is then judged there like any other — a match counts, a wrong key flashes and says
 the caret was moved. Moving on a wrong key is deliberate: the gesture said "I want to type",
 and where is the review's to answer even when the key is not. Enter is routed the same way,
-so no printable key reaches the read-only check while the review's editor is armed. What still
-does is a paste or a selection typed over, which are gestures about the file rather than about
-a character, and Ctrl+E remains the answer for those.
+so no printable key reaches the read-only check while the review's editor is armed. Backspace,
+the reflex after a wrong key, is answered the same way: nothing was inserted, so there is
+nothing to erase, and the status bar says so. What still reaches the read-only check is a paste
+or a selection typed over, which are gestures about the file rather than about a character, and
+Ctrl+E remains the answer for those.
 
 Ordered walking survives as the default *motion*, not as a rule: claiming a section walks the
 cursor to the next one still owed, wrapping at the end, so someone who just keeps typing is
@@ -780,8 +782,8 @@ from the queue, which is where they are already refused.
 Keys are the editor review's wherever the editor review has one. Tab fills a word, Alt+F a
 line, Alt+S skips the region, Alt+J brings the caret back into view, Ctrl+E hands the file to
 an editor review so the region can be written by hand, and Enter is a line break — or, on a
-deletion, the acknowledgement, since there is nothing there to type. Every other key scrolls
-the page. Ctrl+E is a contributed keybinding like the rest, scoped to the page's own panel so
+deletion, the acknowledgement, since there is nothing there to type. Backspace erases nothing
+and says so, since a wrong key never lands. Every other key scrolls the page. Ctrl+E is a contributed keybinding like the rest, scoped to the page's own panel so
 Quick Open keeps it everywhere else, and it is a *question* rather than an instruction: the
 page holds the caret, so the command asks which region is being worked on and the page answers
 with it.

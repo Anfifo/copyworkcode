@@ -101,6 +101,9 @@ export function activate(context: vscode.ExtensionContext): void {
       retype?.finishReview()
     ),
     vscode.commands.registerCommand('copyworkcode.typeEnter', () => retype?.typeEnter()),
+    vscode.commands.registerCommand('copyworkcode.typeBackspace', () =>
+      retype?.typeBackspace()
+    ),
     vscode.commands.registerCommand('copyworkcode.enableEditing', () =>
       retype?.enableEditing()
     ),

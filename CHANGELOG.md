@@ -4,6 +4,8 @@ Notable changes to CopyWorkCode. Versions follow [semantic versioning](https://s
 
 ## [Unreleased]
 
+## [0.0.2]
+
 ### Review
 
 - **Typographic punctuation takes any punctuation key.** An em dash, a curly quote or an
@@ -11,6 +13,8 @@ Notable changes to CopyWorkCode. Versions follow [semantic versioning](https://s
   a key for them. The file keeps its own character; only the match is lenient.
 - **Typing outside a section moves the caret to the nearest one** instead of surfacing the
   editor's "cannot edit in read-only editor" message. The key is then judged there.
+- **Backspace after a wrong key** is answered by the review, which has nothing to erase,
+  instead of by the editor's read-only message.
 
 ### Fixed
 
