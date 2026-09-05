@@ -21,11 +21,13 @@ What this buys us, in order of priority:
 4. **Intent alongside diff** — where the source tool exposes it, the AI's stated goal for
    a change is captured and shown next to it.
 
-## Change detection: hybrid
+## Change detection
 
-Two detection layers, one event queue.
+One capture path today: the agent hook below. A tool-agnostic fallback that infers agent
+edits from editor and disk activity is planned but not built (see todo.md); until it
+exists, changes that no hook saw are reached through the git comparison mode instead.
 
-### Layer 1 — agent hook integration (precise, carries intent)
+### Agent hook integration (precise, carries intent)
 
 Tools that expose lifecycle hooks (Claude Code first) get a small hook script registered
 for two moments around every file edit/write the agent performs:
@@ -82,19 +84,6 @@ Key properties:
 - **It records only where invited.** The hook script no-ops in workspaces that haven't
   enabled the extension, so one user-wide entry never means recording everywhere.
 
-### Layer 2 — editor heuristics (tool-agnostic fallback)
-
-For everything else — other assistants, a whole file pasted from a chat window, external
-tools writing to disk:
-
-- Large multi-line insertions in the editor that don't match keystroke-by-keystroke typing
-  (paste / programmatic apply) become candidate events.
-- File watcher catches changes written to disk outside the editor.
-- Known noise is excluded where detectable (git branch switches, formatters); anything
-  ambiguous is presented as a candidate the user can dismiss.
-
-Heuristic events carry no intent — that's inherent to the layer.
-
 ## Unit of review: net diff vs. baseline
 
 Individual events go stale fast: by the time review happens, the agent may have rewritten
@@ -114,9 +103,9 @@ Mechanics of the store:
   percent-encoded workspace-relative path (forward slashes). Flat, greppable, no index to
   corrupt. The hook re-implements this naming in plain JS; the two must stay in sync.
 - The *initial* baseline for a file is written by the capture hook just before the
-  agent's first edit (see Layer 1). A brand-new file gets an empty baseline, so its whole
-  content is debt. Files without a baseline have no debt — the extension only ever asks
-  for review of changes it saw an agent make.
+  agent's first edit (see "Agent hook integration"). A brand-new file gets an empty
+  baseline, so its whole content is debt. Files without a baseline have no debt — the
+  extension only ever asks for review of changes it saw an agent make.
 - The baseline advances when a review completes, when the user skips a file, or when an
   auto-skip glob matches a change event.
 - Diffing is line-based, and line endings are normalized first: a CRLF/LF difference is
@@ -125,9 +114,10 @@ Mechanics of the store:
 Consequences:
 
 - Agent iteration collapses to one review of the final result, not N intermediate states.
-- Heuristic and hook events feed the same model; a region with no event behind it can
-  still show up in the diff (e.g. the user's own edits) and is simply not flagged as
-  agent-made.
+- Events annotate the diff rather than define it; a region with no event behind it can
+  still show up (e.g. the user's own edits) and is simply not flagged as agent-made. The
+  event model carries a source field so a second capture path can feed it without
+  changing anything downstream.
 - Baselines must be git-aware eventually (branch switches change files without anyone
   "editing" them); v1 may accept weirdness there, but it's a known hole, not a surprise.
   The git comparison mode below is not that fix, though it is a way out when snapshots

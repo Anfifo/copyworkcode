@@ -57,9 +57,16 @@ promoted here when they're deemed worth building.
       the assistant message that made the change and surface its stated reasoning next to
       the diff. Extract eagerly, near capture time — transcripts get compacted or
       deleted.
-- [ ] **Heuristic detection layer** — tool-agnostic fallback: large non-typed insertions
-      in the editor (paste / programmatic apply) and external writes to disk become
-      candidate events; exclude known noise (git branch switches, formatters).
+- [ ] **Heuristic detection layer** — tool-agnostic fallback for assistants without hooks,
+      a whole file pasted from a chat window, or external tools writing to disk. Large
+      multi-line insertions in the editor that don't match keystroke-by-keystroke typing
+      (paste / programmatic apply) and writes that land on disk outside the editor become
+      candidate events, writing a baseline first if the file has none, exactly as the hook
+      does. Known noise is excluded where detectable (git branch switches, formatters);
+      anything ambiguous is shown as a candidate the user can dismiss. These events carry
+      no intent — that is inherent to the layer. Open question before building: whether
+      the false positives are worth it now that git comparison covers the "nothing was
+      watching" case with no setup.
 
 ## Later
 
