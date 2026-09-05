@@ -76,8 +76,3 @@ promoted here when they're deemed worth building.
       the change set page across every file at once — so what is left is whether the queue
       itself still wants it.
 - [ ] Multi-root workspace support (currently first folder only).
-
-## Before going public / Marketplace
-
-- [ ] **Register the publisher.** The manifest claims `Anfifo`; it has to exist on the
-      Marketplace, and on Open VSX separately, before either will accept a publish.
