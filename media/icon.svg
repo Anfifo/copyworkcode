@@ -1,10 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-  <rect x="2" y="6" width="20" height="12" rx="2"/>
-  <path d="M6 10h0.01"/>
-  <path d="M10 10h0.01"/>
-  <path d="M14 10h0.01"/>
-  <path d="M18 10h0.01"/>
-  <path d="M6 14h0.01"/>
-  <path d="M18 14h0.01"/>
-  <path d="M9 14h6"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="currentColor">
+  <line x1="18" y1="76" x2="47" y2="76" stroke="currentColor" stroke-width="10" stroke-linecap="round"/>
+  <line x1="81" y1="76" x2="110" y2="76" stroke="currentColor" stroke-width="10" stroke-linecap="round" opacity="0.5"/>
+  <rect x="60" y="42" width="8" height="66" rx="4"/>
+  <rect x="53" y="39" width="22" height="7" rx="3.5"/>
+  <rect x="53" y="104" width="22" height="7" rx="3.5"/>
+  <polygon points="98,12 103.4,27.6 119,33 103.4,38.4 98,54 92.6,38.4 77,33 92.6,27.6"/>
 </svg>

@@ -79,10 +79,5 @@ promoted here when they're deemed worth building.
 
 ## Before going public / Marketplace
 
-- [ ] **A 128x128 PNG icon.** The manifest points at `media/icon.png` and the Marketplace
-      refuses SVG, so the existing `media/icon.svg` — which still serves the activity-bar
-      panel and the change set page's tab — cannot be the one it ships. This is the last
-      thing standing between the repo and `vsce publish`: with the icon field removed the
-      package builds clean, 37 files, 99 KB.
 - [ ] **Register the publisher.** The manifest claims `Anfifo`; it has to exist on the
       Marketplace, and on Open VSX separately, before either will accept a publish.
