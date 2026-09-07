@@ -15,8 +15,8 @@
  * then hands the file over from whatever surface had it, which is asynchronous;
  * `commit` applies the result. The state the resolution was worked out against
  * is carried between the two, so a gesture aimed at progress that something else
- * replaced in the meantime is dropped rather than applied to whatever took its
- * place.
+ * replaced in the meantime is dropped, and whatever took its place is left
+ * alone.
  *
  * Positions here count characters into a region, and nothing moves under them:
  * the page reviews the file as it stood when the document was built. That is the
@@ -109,8 +109,8 @@ export type Resolution =
 /** A file every region of which is now accounted for. */
 export interface FinishedFile {
   file: string;
-  /** What the page reviewed: what a baseline advance moves to, rather than
-   * whatever is on disk by now. */
+  /** What the page reviewed: what a baseline advance moves to, whatever is on
+   * disk by now. */
   content: string;
   counts: Record<SectionOutcome, number>;
   /** The file-level outcome for the review log. */
@@ -137,10 +137,10 @@ export class ChangeSetReview {
   private taken = new Set<string>();
   /**
    * Files the page handed to an editor review, against whether it had taken
-   * them over first. Handing one over is a deliberate exit rather than a
-   * collision — the progress went with it — so the page stops answering for
-   * these entirely: no gesture reaches them, no row reads from them, and the
-   * drop an editor review would otherwise trigger has nothing left to do. The
+   * them over first. Handing one over is a deliberate exit — the progress went
+   * with it — so the page stops answering for these entirely: no gesture
+   * reaches them, no row reads from them, and the drop an editor review would
+   * otherwise trigger has nothing left to do. The
    * flag is what a failed handover is put back from.
    */
   private handed = new Map<string, boolean>();
@@ -189,9 +189,9 @@ export class ChangeSetReview {
     const live = this.files.get(file);
     if (!live || !this.taken.has(file)) return undefined;
     const claimed = live.states.filter((state) => state.outcome !== undefined).length;
-    // A file finished here is a review that happened, not one in progress: its
-    // baseline moved when it closed, so debt standing against it again is a new
-    // change this page has not read.
+    // A file finished here is a review that happened: its baseline moved when
+    // it closed, so debt standing against it again is a new change this page
+    // has not read.
     if (claimed === live.states.length) return undefined;
     return { claimed, total: live.states.length };
   }
@@ -283,7 +283,7 @@ export class ChangeSetReview {
   /**
    * The page becomes this file's review surface. Recorded before the handover it
    * implies has finished, so every later gesture on the file sees that it has
-   * been asked for already rather than asking again.
+   * been asked for already.
    */
   takeOver(file: string): void {
     this.taken.add(file);
@@ -332,9 +332,8 @@ export class ChangeSetReview {
 
   /**
    * Another surface took this file over: drop what the page had on it. The
-   * regions come back owed rather than disappearing, because the file is still
-   * part of the change set and still has to be read — it is only being reviewed
-   * somewhere else now.
+   * regions come back owed, because the file is still part of the change set
+   * and still has to be read — it is only being reviewed somewhere else now.
    */
   dropFile(file: string): Outbound | undefined {
     const live = this.files.get(file);
@@ -361,7 +360,7 @@ export class ChangeSetReview {
    * writes their own code, and one surface owns a file at a time.
    * What is different from every other way of losing a file is that nothing is
    * given up: the seed is the page's progress, and the review that receives it
-   * starts where the reviewer stopped rather than at zero.
+   * starts where the reviewer stopped.
    *
    * Nothing here reaches an editor; the caller does that, and puts this back
    * with `unhand` if it could not.

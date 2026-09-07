@@ -170,7 +170,8 @@ test('a fill advances without claiming, and a region a keystroke touched is type
   play(review, { type: 'fillLine', file: '/w/a.ts', index: 0 });
 
   // The line was finished by a fill, but a keystroke was matched here, so this
-  // is a region the reviewer went through rather than one they waved past.
+  // is a region the reviewer went through. Filling it whole would have been a
+  // wave past.
   assert.deepEqual(stateOf(review, '/w/a.ts'), {
     position: 11,
     touched: true,
@@ -218,8 +219,8 @@ test('the last region claimed finishes the file, with what the page read', () =>
   });
   assert.equal(commit.finished.outcome, 'typed');
   assert.equal(commit.finished.summary, '1 typed, 0 skipped');
-  // The baseline advances to what was read, not to whatever is on disk by now;
-  // anything that landed since comes back as debt.
+  // The baseline advances to what was read; anything that landed on disk since
+  // comes back as debt.
   assert.equal(commit.finished.content, live.current);
   assert.deepEqual(commit.posts[commit.posts.length - 1], {
     type: 'done',

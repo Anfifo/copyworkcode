@@ -4,8 +4,8 @@
  * The page is the one part of the extension that cannot be reached from the
  * integration tests: nothing can post a message *into* a webview from the
  * extension host, and nothing can press a key inside one. So its scripts are
- * loaded here instead — the real files, not a copy of their logic — with the four
- * globals a webview hands them standing in for the browser.
+ * loaded here, the shipped files themselves, with the four globals a webview
+ * hands them standing in for the browser.
  *
  * What this models is structure: elements, their classes, their text, their data
  * attributes, and the three events the page listens for. What it deliberately
@@ -266,7 +266,7 @@ export function loadPage(): Page {
     return timers.length;
   };
 
-  // The page is a script, not a module: run it with the globals a webview gives
+  // The page is a browser script, so run it with the globals a webview gives
   // it. The shipped file has to be the one that runs; a copy of its logic here
   // would be a test of the copy. The highlighter goes first and hangs itself off
   // `window`, which is how the page finds it in a browser too.

@@ -26,7 +26,7 @@ export function parseEventChunk(
     try {
       event = JSON.parse(line);
     } catch {
-      continue; // tolerate a corrupt line rather than losing the tail
+      continue; // tolerate a corrupt line and keep the tail
     }
     if (!event.id || !event.file || seen.has(event.id)) continue;
     seen.add(event.id);

@@ -92,8 +92,8 @@ test('buildSections marks a deletion-only change as a confirm section', () => {
   assert.equal(sections.length, 1);
   assert.equal(sections[0].kind, 'confirm');
   assert.equal(sections[0].target, '');
-  // The text, not a count: a deletion leaves nothing in the file to look at, so
-  // this is the only record of what it took.
+  // The removed text is kept: a deletion leaves nothing in the file to look at,
+  // so this is the only record of what it took.
   assert.deepEqual(sections[0].removedLines, ['gone']);
 });
 
@@ -101,11 +101,12 @@ test('buildSections handles a deletion at the end of the file', () => {
   const current = 'keep\n';
   const sections = buildSections('keep\ngone\n', current);
   // The deletion sits past the last line, so the anchor collapses onto the end
-  // of the document instead of pointing at a line that is not there.
+  // of the document; the line it would point at is gone.
   assert.equal(sections[0].start, current.length);
   assert.equal(sections[0].end, current.length);
   // No line follows the removal, so its boundary has to be drawn below the
-  // last line that survived rather than above the one that took its place.
+  // last line that survived. Elsewhere it goes above the line that took the
+  // removed one's place.
   assert.equal(sections[0].removedAtEnd, true);
 });
 
@@ -384,7 +385,7 @@ test('nearestUnclaimed picks the closest open section, ahead on a tie', () => {
 
 test('sectionAt prefers the section a boundary offset starts', () => {
   // Two sections back to back: the cursor at the seam should pick the one it
-  // can start typing in, not the one it just left.
+  // can start typing in, which is the one beginning at the seam.
   const sections = buildSections('a\n', 'a\nx\ny\n');
   const one: Section[] = [
     { ...sections[0], start: 2, end: 4, target: 'x\n' },

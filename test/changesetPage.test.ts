@@ -153,8 +153,8 @@ test('a file is drawn with its heading, its context and the code it owes', () =>
   assert.deepEqual(added(regions[0]).map(row).map((line) => [line.n, line.owed]), [
     ['10', 'changed 10'],
   ]);
-  // What the change took away, shown in the place it was, and marked as gone
-  // rather than numbered — the line is not in the file any more.
+  // What the change took away, shown in the place it was. The line is not in
+  // the file any more, so its number column holds the mark for gone.
   assert.deepEqual(
     removed(regions[0]).map(row).map((line) => [line.n, line.text]),
     [['−', 'line 10']]
@@ -494,7 +494,7 @@ test('a key the region does not owe changes nothing on either side', () => {
   const region = page.regions(page.files()[0])[0];
   assert.equal(region.classList.contains('wrong'), true);
   assert.equal(row(added(region)[0]).covered, '');
-  // The page never took the file over, so nothing else was disturbed either.
+  // The page never took the file over, so the file stays outside the review.
   assert.equal(review.owns('/w/a.ts'), false);
 });
 
@@ -604,7 +604,7 @@ test('a file that went to the editor says so, and stops taking keystrokes', () =
   // nothing here types them, so the only controls left are ways of looking.
   assert.deepEqual(lensLabels(page.regions(first)[0]), ['Open here']);
 
-  // The caret went to the next file's first region rather than nowhere.
+  // The caret still landed somewhere, on the next file's first region.
   assert.equal(page.regions(second)[0].classList.contains('active'), true);
   page.sent.length = 0;
   page.press('c');

@@ -65,7 +65,7 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
 
     // Both row commands arrive with the tree's element, which is the file path
-    // itself, not the item built from it.
+    // the item was built from.
     vscode.commands.registerCommand('copyworkcode.skipFile', (file?: string) => {
       const root = workspaceData.workspaceRoot();
       if (!file || !root || !source) return;
@@ -213,7 +213,7 @@ async function setDebtMode(mode: DebtMode): Promise<void> {
  *
  * Each surface reports coverage in its own terms and neither knows about the
  * other; naming the one to go back to is the row's business, and so it is done
- * here rather than in either of them.
+ * here.
  */
 function rowProgress(file: string): RowProgress | undefined {
   const editor = retype?.progressFor(file);

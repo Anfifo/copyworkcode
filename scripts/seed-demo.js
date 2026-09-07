@@ -28,7 +28,7 @@ fs.mkdirSync(baselines, { recursive: true });
 // the folder lives in the repo you are editing — can hold a handle on the
 // directory itself for a moment, and removing it outright then fails with
 // EBUSY. Emptying it is just as good a reset and does not need the directory to
-// go away, so that is the fallback rather than an error the reseed dies on.
+// go away, so that is the fallback when the removal fails.
 function reset(dir) {
   try {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -199,7 +199,7 @@ seed(
 // most real agent edits have, and the one every other file here takes apart
 // into a single kind. Additions and replacements carry their own text; the
 // deletion in `execute` has none, so it is the only change here the surface
-// has to mark rather than colour.
+// has to mark.
 seed(
   'overhaul.ts',
   [

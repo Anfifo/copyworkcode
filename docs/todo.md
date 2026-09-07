@@ -7,7 +7,7 @@ promoted here when they're deemed worth building.
 ## Next up
 
 - [ ] **Dogfood the core loop on real work.** The retype flow is built and tested; whether
-      retyping feels like review rather than punishment is only testable by living with it.
+      retyping feels like review or like punishment is only testable by living with it.
       Expect matching-rule and pacing tweaks. Questions to answer by use:
       - Does losing the ordered walk cost anything now that coverage is the only guarantee?
         The fallback is recorded in brainstorm.md.
@@ -33,7 +33,7 @@ promoted here when they're deemed worth building.
       - The handover (Ctrl+E on a region): does the key arrive at all, given the binding is
         scoped by panel id and Quick Open may win? The strip control is the fallback, but a
         key that silently does the wrong thing is worse than none. Does the file left behind
-        read as handed on rather than lost? Its regions stay drawn; an italic path and
+        read as handed on, or as lost? Its regions stay drawn; an italic path and
         `being reviewed in the editor` in the heading are all that say so. Is reloading enough
         to get a file back, or is returning one without re-reading the change set a real want?
 - [ ] **Per-project override for content exclusion** — the exclusion patterns are fixed;
@@ -62,9 +62,9 @@ promoted here when they're deemed worth building.
 - [ ] Auto-skip rules beyond globs: by change size and change kind (formatting-only).
 - [ ] Review stats: typed vs. skipped ratios over time, per file area.
 - [ ] Adapters for more agents beyond the first integration.
-- [ ] Events view should also show reviewed/skipped history, not only pending items.
+- [ ] Events view should also show reviewed/skipped history alongside pending items.
 - [ ] Sections as expandable rows under each file in the queue, so a click can open
-      the review at one specific section instead of the nearest one. Mostly answered from
+      the review at a chosen section, where today it opens at the nearest. Mostly answered from
       two other directions now — the in-editor "start here" lens within an open file, and
       the change set page across every file at once — so what is left is whether the queue
       itself still wants it.

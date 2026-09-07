@@ -3,13 +3,13 @@
  * changed region in it, and the surviving code around each region.
  *
  * Editor-independent and serializable, because the surface that renders this is
- * a page rather than a buffer — the offsets a review works in and the line
+ * a page — the offsets a review works in and the line
  * numbers a reader reads by are different things, and this is where the first
  * becomes the second. Regions come from `buildSections` unchanged, so a region
  * means the same thing here as in an editor review and the two surfaces can
  * point at each other by index.
  *
- * Context is bounded and expandable rather than whole-file. A change set can
+ * Context is bounded and expandable. A change set can
  * span thousands of lines nobody intends to read, and sending every one of them
  * to open the page is a cost paid on every file for the sake of the few gaps
  * anyone opens. `sliceLines` answers those on demand.
@@ -22,8 +22,8 @@
  * diff, so a bare CR is never part of a change and never something the reviewer
  * owes.
  *
- * Lines are counted the way an editor counts them, not the way the diff does: a
- * trailing newline opens an empty last line here. That is a deliberate break
+ * Lines are counted the way an editor counts them: a trailing newline opens an
+ * empty last line here. That is a deliberate break
  * from `countLines`, and the removal geometry is why. A removal that ran off the
  * end of the file is anchored on exactly that empty line — it is where the
  * deleted text was — so a count that leaves the line out has nowhere to put the
@@ -140,7 +140,7 @@ function toView(section: Section, index: number, starts: readonly number[]): Vie
  *
  * - **Context surrounds a region on both sides.** Between two regions the same
  *   lines serve as the first one's tail and the second one's head, so the ranges
- *   are merged before anything is emitted rather than per region.
+ *   are merged before anything is emitted.
  * - **A gap only exists when it saves something.** A control that hides three
  *   lines and reveals the same three lines is worse than the lines, so a short
  *   hole between two regions of interest is simply shown.

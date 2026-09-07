@@ -14,7 +14,7 @@ import { isSensitivePath } from './core/sensitive';
  * - `git`: the file's content at a revision, HEAD by default. Debt is
  *   "changed since that revision", whether or not anything was tracking.
  *
- * Git mode is an override, not a migration: switching to it replaces the list
+ * Git mode is an override: switching to it replaces the list
  * and the diff baseline while the snapshot store sits untouched, so switching
  * back restores exactly the tracked debt that was there before. Reviewing a
  * file always advances its snapshot, in either mode — that is what lets a

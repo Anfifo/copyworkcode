@@ -157,7 +157,7 @@ test('regions are numbered by the order they appear in, from zero', () => {
     .replace('line 35', 'changed 35');
 
   // The number is the handle both surfaces address a region by, so it has to be
-  // the region's place in the file's set and nothing else.
+  // the region's place in the file's set, and only that.
   const indexes = view(baseline, current)
     .blocks.filter((b) => b.kind === 'section')
     .map((b) => (b.kind === 'section' ? b.section.index : -1));

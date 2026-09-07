@@ -26,8 +26,8 @@ const FILE_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit']);
 
 // Files whose content is never copied anywhere. This mirrors the pattern list
 // in src/core/sensitive.ts, which carries the reasoning and the tests; the two
-// must stay in sync. Reimplemented here rather than imported because this
-// script runs standalone, with no build step and no dependencies.
+// must stay in sync. Reimplemented here because this script runs standalone,
+// with no build step and no dependencies.
 const SENSITIVE_NAMES = [
   /^\.env(\.|$)/,
   /\.env$/,

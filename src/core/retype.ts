@@ -83,8 +83,8 @@ export class RetypeEngine {
 
   /**
    * When only whitespace is left after an accepted keystroke, apply it too —
-   * typing the last visible character completes the section instead of
-   * leaving an invisible newline pending.
+   * typing the last visible character completes the section. Left alone, the
+   * invisible newline would stay pending.
    */
   private absorbTrailingWhitespace(accepted: string): string {
     const rest = this.remaining;
@@ -117,9 +117,9 @@ export class RetypeEngine {
    * gesture always lands on a boundary the reader recognizes.
    *
    * Moving to the next line is a word's worth of gesture on its own: when the
-   * pending whitespace crosses a line break the fill stops there rather than
-   * carrying on into the first word of the new line, which would land the
-   * reviewer somewhere they hadn't looked yet.
+   * pending whitespace crosses a line break the fill stops there. Carrying on
+   * into the first word of the new line would land the reviewer somewhere they
+   * hadn't looked yet.
    */
   fillWord(): string {
     if (this.done) {
@@ -150,9 +150,9 @@ export class RetypeEngine {
 
   /**
    * The whitespace one gesture may apply: everything up to the next line
-   * break, that break, and the indentation of the line it opens — and then
-   * nothing more, so a run spanning a blank line is handed over one line at a
-   * time. A break is `\r?\n` so a CRLF target is never split down the middle.
+   * break, that break, and the indentation of the line it opens — and it stops
+   * there, so a run spanning a blank line is handed over one line at a time.
+   * A break is `\r?\n` so a CRLF target is never split down the middle.
    */
   private whitespaceRunAhead(): string {
     let end = this.spaceEnd(this.pos);

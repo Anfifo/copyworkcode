@@ -595,9 +595,9 @@ export async function run(): Promise<void> {
   assert.equal(reviews()[19].hunksTyped, 1, 'and counts as typed, not written in');
 
   // --- A review that opens with editing already enabled --------------------
-  // The setting changes which state a review starts in and nothing else: the
-  // first keystroke is an edit rather than a match, and the section still has to
-  // be claimed before the review can finish.
+  // The setting only changes which state a review starts in: the first
+  // keystroke is recorded as an edit, and the section still has to be claimed
+  // before the review can finish.
   await config().update('startEditing', true, true);
   await settle();
   const editFirst = await review('startedit.ts');
@@ -624,11 +624,10 @@ export async function run(): Promise<void> {
 
   // --- Where a removal's boundary lands ------------------------------------
   // Decorations cannot be read back out of an editor, so nothing here can prove
-  // the mark looks right. What it does pin down is the part that could be
-  // *wrong* rather than merely ugly: which line each removal is anchored to and
-  // which side of it the rule goes, against real documents rather than a model
-  // of one. Line counting is the trap — the diff does not count a trailing
-  // newline as a line and an editor does.
+  // the mark looks right. What it does pin down is the part with a right and a
+  // wrong answer: which line each removal is anchored to and which side of it
+  // the rule goes, checked against real documents. Line counting is the trap —
+  // the diff does not count a trailing newline as a line and an editor does.
   const openText = async (content: string) =>
     vscode.workspace.openTextDocument({ content, language: 'plaintext' });
   const tail = ['four', 'five', 'six', 'seven'];
@@ -765,8 +764,8 @@ export async function run(): Promise<void> {
   );
 
   // And the command the link carries. The panel it opens is UI no suite can
-  // read, but a wrong command name or argument shape fails here rather than
-  // silently doing nothing under the reviewer's click.
+  // read, but a wrong command name or argument shape fails here. In use it
+  // would silently do nothing under the reviewer's click.
   await exec('copyworkcode.peekRemoved', 5);
   await settle();
 
@@ -841,7 +840,7 @@ export async function run(): Promise<void> {
   await exec('copyworkcode.abortReview');
   await settle();
 
-  // --- Moving to another file parks a review instead of ending it -----------
+  // --- Moving to another file parks a review for later ----------------------
   // The reviewer who opens a second file has not abandoned the first one, so its
   // sections and their positions wait for them. What the parked file must *not*
   // keep is the review's hold on it: nothing is guiding it, so it has to be an
@@ -948,7 +947,7 @@ export async function run(): Promise<void> {
   assert.equal(deletionRecord?.hunksTyped, 1, 'and the addition is typed');
 
   // Typing must be back to normal once no review is active. Typed into a file
-  // that was never a review editor, so this cannot pass or fail on whatever
+  // that stayed outside every review, so this cannot pass or fail on whatever
   // the last section happened to leave focused.
   const plain = await vscode.workspace.openTextDocument(file('skipfile.ts'));
   await vscode.window.showTextDocument(plain, { preview: false });

@@ -10,7 +10,7 @@
  * is the one invariant a page built on retyping cannot do without.
  *
  * State carries from line to line inside a block, so a doc comment or a template
- * literal spanning several rows is one run rather than several guesses. It does
+ * literal spanning several rows is one run. It does
  * not carry between blocks: the page draws regions and context with collapsed
  * gaps between them, so a block is all the surrounding text there is. A block
  * that *starts* inside a comment is the one case worth catching, because it is
@@ -19,14 +19,14 @@
  * inside one.
  *
  * Colour is a reading aid, so a quote left unterminated stops at the end of its
- * own line rather than bleeding colour down the page. Only the delimiters that
+ * own line. Only the delimiters that
  * are multi-line — template literals, triple quotes — carry over.
  */
 
 (function () {
   /**
-   * Words a family colours as keywords: a coarse union per family rather than a
-   * grammar per language. `func` in a TypeScript file is a word that will not
+   * Words a family colours as keywords: a coarse union per family. `func` in a
+   * TypeScript file is a word that will not
    * appear on its own anyway, and being one keyword short of exact costs a
    * reading aid nothing — while a table per language would have to be kept.
    *
@@ -136,7 +136,7 @@
   }
 
   /** The family a path belongs to: by extension, or by the whole name for the
-   * files that carry their language in it rather than after a dot. */
+   * files that carry their language in it. */
   function familyOf(filename) {
     const name = String(filename || '').toLowerCase();
     const base = name.slice(name.lastIndexOf('/') + 1);
@@ -277,7 +277,7 @@
 
   /** Where a quoted run ends: past its closing quote, or at the end of the line
    * if there isn't one. Unterminated is left on its own line on purpose — a
-   * stray apostrophe should cost one line of colour, not the rest of the page. */
+   * stray apostrophe should cost one line of colour at most. */
   function closeQuote(rest, quote) {
     for (let i = quote.length; i < rest.length; i++) {
       if (rest[i] === '\\') {

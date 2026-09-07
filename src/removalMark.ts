@@ -5,16 +5,16 @@ import * as vscode from 'vscode';
  *
  * A removal leaves no text behind to colour, so it cannot be shown the way an
  * addition is. What it does leave is a boundary — the line that took its place
- * — so the mark is a rule *between* lines, a one-pixel border, and never a
- * background: a background would claim the line it touches was deleted, when
- * that line is precisely the one that survived.
+ * — so the mark is a rule *between* lines, a one-pixel border. A background
+ * would claim the line it touches was deleted, when that line is precisely the
+ * one that survived.
  *
  * Nothing lands on the line's own text. An earlier version put the count in the
  * right margin, which read as a label on whatever code was sitting there — the
  * one line the removal demonstrably did *not* touch. The count belongs either
  * above the line, where the lens strip renders and where the deleted lines
  * physically were, or beside it in the gutter, which is the column for facts
- * about a line rather than part of it. It goes in both: the lens says it in
+ * about a line. It goes in both: the lens says it in
  * words, the gutter carries the number for reading and for finding while
  * scrolling past. The lines themselves are one hover away, and the whole
  * removal one click further.
@@ -26,9 +26,9 @@ import * as vscode from 'vscode';
  * how the hover behind it is discoverable at all.
  *
  * The mark clears when its section is claimed. It marks work the review still
- * owes, not a permanent fact about the file: what happened to the file is what
- * the diff is for, and a rule that outlives the thing it was pointing at is
- * just a stain on a line nobody has any further business with.
+ * owes: what happened to the file is what the diff is for, and a rule that
+ * outlives the thing it was pointing at is just a stain on a line nobody has
+ * any further business with.
  */
 
 /** One removal to mark. */
@@ -39,7 +39,7 @@ export interface Removal {
    * these are what the reader asks for next. */
   text: string[];
   /** The removal ran off the end of the file, so nothing follows it: the rule
-   * belongs below `line` rather than above it. */
+   * belongs below `line`. */
   atEnd: boolean;
   /** Lines were added here in place of the ones that went. Those additions
    * carry the section's own marks, so this removal gets no rule of its own. */
@@ -80,9 +80,8 @@ const HOVER_LINES = 12;
  * single unstyled run, so it cannot be rendered beside the rule.
  *
  * A hover can hold it: a fenced block in the document's own language, so the
- * removed code arrives syntax-highlighted rather than as a grey slab. Long
- * removals are cut off rather than scrolled, and `showAll` — a command link to
- * the panel — is where the whole thing lives.
+ * removed code arrives syntax-highlighted. Long removals are cut off, and
+ * `showAll` — a command link to the panel — is where the whole thing lives.
  */
 export function removalHover(
   document: vscode.TextDocument,
@@ -166,7 +165,7 @@ export class RemovalMarks implements vscode.Disposable {
       editor.setDecorations(this.badgeType(label), at);
     }
     // A count that was on screen a moment ago and isn't now still has a type
-    // holding its ranges, and nothing else will ever clear it.
+    // holding its ranges, and this is the only place that clears it.
     for (const [label, type] of this.badges) {
       if (!byLabel.has(label)) editor.setDecorations(type, []);
     }
@@ -231,7 +230,7 @@ function badgeIcon(label: string): vscode.Uri {
     `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">` +
     `<text x="8" y="11.5" text-anchor="middle" textLength="14"` +
     // The gutter is a fixed and narrow column, so the glyphs are squeezed to
-    // the width available rather than allowed to overflow it or be cut off.
+    // the width available.
     ` lengthAdjust="spacingAndGlyphs" font-family="system-ui, sans-serif"` +
     ` font-size="10" font-weight="600" fill="${DELETED_HEX}">${label}</text>` +
     `</svg>`;

@@ -28,7 +28,7 @@ export interface RowProgress {
  * by, and keeps the file-icon theme's own icon so a row still reads as the kind
  * of file it is. The colour of the change goes on the filename instead, via the
  * decoration provider below. The view header names what the rows are being
- * compared against, so a switched baseline is never a silent change, and the
+ * compared against, so a switched baseline announces itself, and the
  * container badge carries the pending count.
  */
 export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
@@ -50,7 +50,7 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
     private decorations?: DebtDecorations
   ) {}
 
-  /** The header and badge live on the view, not on its items. */
+  /** The header and badge live on the view object, so the provider needs it. */
   attach(view: vscode.TreeView<string>): void {
     this.view = view;
   }
@@ -174,8 +174,8 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
 }
 
 /**
- * Tints the filename of the file being reviewed in an editor right now, and
- * nothing else. A review the reviewer stepped away from is not that file, and
+ * Tints the filename of the one file being reviewed in an editor right now.
+ * A review the reviewer stepped away from is not that file, and
  * neither is one the change set page holds: both say how far they got in words,
  * and the one hue the panel has stays on the question of where the reviewer
  * is. The page is not somewhere the queue can point them anyway — it is already
@@ -218,7 +218,8 @@ export class DebtDecorations
       'CopyWorkCode: being reviewed now'
     );
     // The workbench's own list warning colour: the yellow a tree row is meant
-    // to use, so it lands as yellow in a theme rather than as a guess at one.
+    // to use, so it lands as yellow in a theme. A literal value would be a
+    // guess at one.
     value.color = new vscode.ThemeColor('list.warningForeground');
     return value;
   }

@@ -4,7 +4,7 @@
  * survive arbitrary edits landing in the buffer mid-review — can be tested
  * without an editor.
  *
- * Sections are a *set*, not a sequence. Each one carries its own typing
+ * Sections are a *set*. Each one carries its own typing
  * position and its own outcome, and the review is done when every section is
  * claimed, in whatever order the reviewer got to them.
  *
@@ -41,9 +41,9 @@ export interface Section {
   /** Document text of `[start, end)` — the retype target. '' for `confirm`. */
   target: string;
   /** The baseline lines that disappeared at this section, as text. Kept whole
-   * rather than counted because a removal leaves nothing in the buffer to look
-   * at: the text here is the only record of what went, and the surface shows it
-   * on demand. Sticky across remapping, like `removedAtEnd` — later edits move
+   * because a removal leaves nothing in the buffer to look at: the text here
+   * is the only record of what went, and the surface shows it on demand.
+   * Sticky across remapping, like `removedAtEnd` — later edits move
    * the section's offsets but cannot change what the baseline lost. */
   removedLines: string[];
   /** True when the removed lines were past the end of the file, so no line
@@ -83,7 +83,7 @@ export interface SectionSeed {
 /**
  * Give a freshly built section set the progress another surface already made on
  * it, so handing a file from one review surface to the other keeps what was
- * covered instead of asking for it again.
+ * covered.
  *
  * Answers whether the seed was usable. Both surfaces build their sections from
  * the same diff, so a seed matches one for one — but the file may have changed
@@ -109,8 +109,8 @@ export function seedSections(
 /**
  * Where a position counted in normalized text lands in text holding the file's
  * own line endings. Only a CRLF pair differs — one character to the surface
- * that normalized it, two to the buffer — so the walk is over line breaks and
- * nothing else.
+ * that normalized it, two to the buffer — so the walk only has to visit line
+ * breaks.
  */
 function rawPosition(target: string, position: number): number {
   let raw = 0;
@@ -338,8 +338,8 @@ export function enclosingSection(
 /**
  * The section to lead the reviewer to next: the first unclaimed one at or
  * after `offset`, wrapping around to the first if there is none. Order is a
- * convenience for walking straight through, not a rule — nothing stops the
- * reviewer from clicking into any section at any time.
+ * convenience for walking straight through; the reviewer can click into any
+ * section at any time.
  */
 export function nextUnclaimed(
   sections: readonly Section[],

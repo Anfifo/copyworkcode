@@ -25,7 +25,7 @@ export type Settings = Record<string, unknown>;
 
 /**
  * `malformed` means the file's `hooks` section isn't shaped the way the agent
- * documents it. Adding refuses rather than overwriting whatever is there;
+ * documents it. Adding refuses and leaves whatever is there alone;
  * removal tolerates any shape, since it can only ever take away.
  */
 export type Change = 'changed' | 'unchanged' | 'malformed';

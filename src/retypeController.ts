@@ -116,8 +116,8 @@ interface Focus {
 export interface ReviewProgress {
   claimed: number;
   total: number;
-  /** True for a review being kept rather than run: the reviewer moved to another
-   * file, and this one's progress is waiting for them. */
+  /** True for a review being kept: the reviewer moved to another file, and
+   * this one's progress is waiting for them. */
   paused: boolean;
 }
 
@@ -126,8 +126,7 @@ export interface ReviewProgress {
  * editor — not a diff — so the review flow owns the visuals while the editor
  * stays an editor: text still owed is dimmed, the section being worked on
  * carries a highlight and a lens strip with its controls, and the exact next
- * character to type is marked. The baseline diff stays one action away instead
- * of being the surface.
+ * character to type is marked. The baseline diff stays one action away.
  *
  * The buffer already holds the final content, so a *matched* keystroke inserts
  * nothing and only advances that section's position, letting the dimmed
@@ -135,22 +134,21 @@ export interface ReviewProgress {
  * reproduced to the letter: a keystroke that doesn't match inserts nothing
  * either, and the editor carries the session read-only flag, so no gesture at
  * all — a paste, a backspace, an undo, a drag — can put text into the file that
- * the reviewer didn't type from the target. A wrong key is a flash and nothing
- * more.
+ * the reviewer didn't type from the target. A wrong key is a flash.
  *
- * Writing their own code is a thing they ask for, not a thing that happens to
- * them: `enableEditing` lifts the read-only flag and stands guidance down, and
- * the file is an ordinary editor again with every convenience back — auto-close,
- * completions, Tab, Enter. `resumeTyping`, on the same key, arms it again and
+ * Writing their own code is a thing they ask for: `enableEditing` lifts the
+ * read-only flag and stands guidance down, and the file is an ordinary editor
+ * again with every convenience back — auto-close, completions, Tab, Enter.
+ * `resumeTyping`, on the same key, arms it again and
  * puts the caret back where the section left off so the rest can be typed out.
- * A section whose text they changed while editing is recorded as edited rather
- * than typed. Both directions are one keystroke and neither loses any progress.
+ * A section whose text they changed while editing is recorded as edited. Both
+ * directions are one keystroke and neither loses any progress.
  *
- * Sections are a set, not a sequence: each carries its own position, and the
- * active one is whichever contains the cursor. Finishing one still walks the
+ * Sections are a set: each carries its own position, and the active one is
+ * whichever contains the cursor. Finishing one still walks the
  * cursor to the next section still owed, so someone who just keeps typing is
  * led straight through the file — but clicking anywhere else hands the editor
- * back immediately. Progress is coverage ("6 of 9 claimed"), not order.
+ * back immediately. Progress is coverage ("6 of 9 claimed").
  *
  * Moving to another file keeps where the review got to. The one being left is
  * *parked*: its sections, their positions and its record of the version under
@@ -167,8 +165,8 @@ export interface ReviewProgress {
  *
  * Because edits are real, the buffer changes under the review, and every
  * change — the reviewer's own, a formatter's, an agent's, an undo — is
- * reconciled by remapping the section set (see `core/sections.ts`) rather than
- * ending the review. Only a wholesale replacement of the document (a revert or
+ * reconciled by remapping the section set (see `core/sections.ts`), and the
+ * review goes on. Only a wholesale replacement of the document (a revert or
  * a reload from disk) re-derives the sections from scratch.
  *
  * Keystrokes are intercepted with a `type` command override, which is what
@@ -194,7 +192,8 @@ export class RetypeController implements vscode.Disposable {
    * `syncTypeOverride`. */
   private typeOverride?: vscode.Disposable;
   /** Set once the override has been reported as unavailable, so a window with
-   * another owner of `type` says so once rather than on every editor switch. */
+   * another owner of `type` says so once and stays quiet on later editor
+   * switches. */
   private overrideLost = false;
   /** Files still flagged session-read-only after their review ended with no
    * editor to run the reset on; cleared when they next become active. */
@@ -228,7 +227,7 @@ export class RetypeController implements vscode.Disposable {
   });
   /** A closed section the reviewer wrote in themselves. Marked, because a
    * review's own record of what happened should be visible in the file it
-   * happened to, not only in the summary at the end. */
+   * happened to as well as in the summary at the end. */
   private takenOver = vscode.window.createTextEditorDecorationType({
     isWholeLine: true,
     borderWidth: '0 0 0 2px',
@@ -261,7 +260,7 @@ export class RetypeController implements vscode.Disposable {
     overviewRulerLane: vscode.OverviewRulerLane.Left,
   });
   /** Boundaries where lines were removed. Owns a decoration type per count, so
-   * unlike the rest it is a class rather than a single type. */
+   * it is a class. */
   private removals = new RemovalMarks();
   /** Animation for accepted keystrokes, fills, and mismatches. Decoration
    * only: it trails the engine and never affects what a keystroke does. */
@@ -343,9 +342,9 @@ export class RetypeController implements vscode.Disposable {
         provideCodeLenses: (document) => this.lensesFor(document),
       }
     );
-    // The removal hover is a provider rather than a message on the decoration:
-    // a decoration hovers where its range is, and a removal's range is the
-    // empty end of a line — on a blank one there is nothing there to point at.
+    // The removal hover is a provider. A message on the decoration would hover
+    // where its range is, and a removal's range is the empty end of a line — on
+    // a blank one there is nothing there to point at.
     // A provider answers for the whole line the removal is marked at, which is
     // the line a reader would aim for anyway.
     this.hoverProvider = vscode.languages.registerHoverProvider(
@@ -375,8 +374,8 @@ export class RetypeController implements vscode.Disposable {
       if (this.session) await this.park(this.session);
       // Coming back to a file the reviewer left part way through is not a new
       // review of it: it is the same one, picked up where they stopped — and
-      // its positions, not a seed's, are the ones that account for every edit
-      // since. A seed is what a review starting from nothing is given.
+      // its positions are the ones that account for every edit since. A seed
+      // is what a review starting from nothing is given.
       if (await this.resume(file)) return;
       await this.startLocked(root, file, handover);
     } finally {
@@ -387,9 +386,9 @@ export class RetypeController implements vscode.Disposable {
   /**
    * Take a file over from the change set page, at one region, with the editor
    * already handed to the reviewer — the gesture behind "write it yourself"
-   * there. The page can type the change as written and nothing else, so the
-   * editor is where a reviewer writes their own code on either surface; what
-   * this adds is that the walk across does not cost them their place.
+   * there. The page only types the change as written, so the editor is where
+   * a reviewer writes their own code on either surface; what this adds is that
+   * the walk across does not cost them their place.
    *
    * The page's progress is a *seed*, and only where there is nothing better. A
    * review of this file that already exists — live or parked — is the surface
@@ -433,8 +432,8 @@ export class RetypeController implements vscode.Disposable {
    * Set a review down without ending it, because the reviewer asked for another
    * file. Everything on screen goes — the overlay, the lens strip, the status
    * bar — and the read-only flag lifts, so the file being left behind is an
-   * ordinary editor rather than a document that refuses to be typed in for
-   * reasons nothing is showing. What stays is the state: the sections, what each
+   * ordinary editor. Left flagged, it would refuse to be typed in for reasons
+   * nothing is showing. What stays is the state: the sections, what each
    * one has covered, and the version the review is against.
    */
   private async park(s: Session): Promise<void> {
@@ -455,11 +454,11 @@ export class RetypeController implements vscode.Disposable {
    * caret where it left off, and guidance armed again unless it was parked with
    * editing enabled.
    *
-   * Answers whether there was one to pick up, so the caller can start a fresh
-   * review instead. Two things make a parked review unusable rather than merely
-   * stale, and both are checked here rather than papered over: a document that
-   * has closed since, whose offsets describe a buffer that no longer exists, and
-   * a file with nothing left behind it to compare against. Everything else — the
+   * Answers whether there was one to pick up, so the caller knows to start a
+   * fresh review. Two things make a parked review unusable, and both are
+   * checked here: a document that has closed since, whose offsets describe a
+   * buffer that no longer exists, and a file with nothing left behind it to
+   * compare against. Everything else — the
    * file rewritten, reformatted, reverted while it waited — was reconciled as it
    * happened, the same way it is for a live review.
    */
@@ -477,8 +476,8 @@ export class RetypeController implements vscode.Disposable {
     this.syncTypeOverride();
     if (!s.editing && !this.typeOverride) {
       // The answer a review that cannot arm at all gets — except that here there
-      // is progress to protect, so it goes back where it was rather than being
-      // spent on a review that could not check a keystroke.
+      // is progress to protect, so it goes back where it was. Running on would
+      // spend it on a review that could not check a keystroke.
       this.session = undefined;
       this.parked.set(file, s);
       void vscode.window.showErrorMessage(
@@ -552,8 +551,8 @@ export class RetypeController implements vscode.Disposable {
     const current = document.getText();
     const sections = buildSections(baseline, current);
     // A seed from a file that has moved on since the page read it describes
-    // regions this set does not have; `seedSections` refuses it whole rather
-    // than fitting positions to the wrong regions, and the review starts fresh.
+    // regions this set does not have; `seedSections` refuses it whole, and the
+    // review starts fresh.
     if (handover) seedSections(sections, handover.sections);
 
     await vscode.window.showTextDocument(document, { preview: false });
@@ -680,8 +679,8 @@ export class RetypeController implements vscode.Disposable {
    * a keystroke while the previous one is still being answered is not something
    * this code should depend on either way: commands driven from the extension
    * arrive sequentially, so the test suite cannot demonstrate the overlap, and
-   * the guarantee is cheap enough to make here rather than assume. Queueing
-   * costs nothing when nothing is pending, which is the usual case.
+   * the guarantee is cheap enough to make here. Queueing costs nothing when
+   * nothing is pending, which is the usual case.
    *
    * Only the outermost entry points go through this: nesting one inside another
    * would wait for itself.
@@ -796,8 +795,7 @@ export class RetypeController implements vscode.Disposable {
    *
    * Nothing about the review is given up: every section keeps its position,
    * what is still owed stays dimmed, and changes landing in the buffer are
-   * reconciled exactly as they are the rest of the time. This is a pause, not
-   * an exit.
+   * reconciled exactly as they are the rest of the time. This is a pause.
    */
   enableEditing(): Promise<void> {
     return this.serialize(async () => {
@@ -1051,7 +1049,7 @@ export class RetypeController implements vscode.Disposable {
     this.updateUi();
   }
 
-  /** The on-demand baseline diff — context, not the review surface. */
+  /** The on-demand baseline diff, opened for context beside the review. */
   async showDiff(): Promise<void> {
     const s = this.session;
     if (!s) return;
@@ -1077,7 +1075,7 @@ export class RetypeController implements vscode.Disposable {
 
   /** Sections whose removal is still worth marking: the ones the review has
    * yet to claim. A claimed section's mark has done its job, and the file's
-   * history is the diff's business rather than the overlay's. */
+   * history is the diff's business. */
   private markedRemovals(s: Session): Section[] {
     return s.sections.filter(
       (section) => section.removedLines.length > 0 && !isClaimed(section)
@@ -1102,8 +1100,8 @@ export class RetypeController implements vscode.Disposable {
     for (const section of this.markedRemovals(s)) {
       const removal = this.removalOf(s, section);
       if (removalAnchor(document, removal)?.line !== position.line) continue;
-      // The link carries the section's offset rather than the section: a
-      // command URI is text, and the offset is what survives the round trip.
+      // The link carries the section's offset: a command URI is text, and the
+      // offset is what survives the round trip.
       const showAll = vscode.Uri.parse(
         `command:copyworkcode.peekRemoved?${encodeURIComponent(
           JSON.stringify([section.start])
@@ -1115,8 +1113,8 @@ export class RetypeController implements vscode.Disposable {
   }
 
   /** The whole removal, in a panel over the line it happened at — where the
-   * hover stops. Opened as a peek rather than an editor so the lines can be
-   * read against the code that replaced them, without leaving it. */
+   * hover stops. Opened as a peek so the lines can be read against the code
+   * that replaced them, without leaving it. */
   async peekRemoved(start: number): Promise<void> {
     const s = this.session;
     if (!s) return;
@@ -1146,9 +1144,9 @@ export class RetypeController implements vscode.Disposable {
     for (const s of this.reviews()) {
       for (const section of s.sections) {
         if (section.removedLines.length === 0) continue;
-        // Matched by the whole name a section's document would be given, not by
-        // the offset alone: with parked reviews holding sections of their own, an
-        // offset no longer says which review's removal is being asked for.
+        // Matched by the whole name a section's document would be given: with
+        // parked reviews holding sections of their own, an offset alone no
+        // longer says which review's removal is being asked for.
         const mine = removedUri(
           s.file,
           s.id,
@@ -1330,9 +1328,9 @@ export class RetypeController implements vscode.Disposable {
   /**
    * Every section is accounted for. The document is saved and its baseline
    * advanced to what the buffer holds now — which, with real edits in play, is
-   * deliberately the reviewer's version of the file rather than the agent's:
-   * the baseline records what was reviewed and accepted, so anything they
-   * rewrote is not handed straight back as debt on the next pass.
+   * deliberately the reviewer's version of the file: the baseline records what
+   * was reviewed and accepted, so anything they rewrote is not handed straight
+   * back as debt on the next pass.
    */
   private async finish(): Promise<void> {
     const s = this.session;
@@ -1556,12 +1554,12 @@ export class RetypeController implements vscode.Disposable {
   /**
    * Where the cursor is in relation to the review.
    *
-   * Guidance covers the whole of a section the review still owes, rather than
-   * the single offset its next character sits at. Requiring the caret to be
-   * exactly there made the most ordinary gesture there is (click into the
+   * Guidance covers the whole of a section the review still owes. Requiring
+   * the caret to be exactly at the one offset its next character sits at, the
+   * typing position, made the most ordinary gesture there is (click into the
    * changed code, start typing) fall through to the plain editor, so the
-   * keystrokes went in *beside* the text they were meant to reproduce instead
-   * of consuming it. Anywhere in the section, typing is matched; the keystroke
+   * keystrokes went in *beside* the text they were meant to reproduce, which
+   * stayed owed. Anywhere in the section, typing is matched; the keystroke
    * applies at the typing position wherever the caret happens to be, and
    * `snapToTypingPosition` puts the caret there so the character always appears
    * where it is being typed.
@@ -1610,8 +1608,8 @@ export class RetypeController implements vscode.Disposable {
   }
 
   /**
-   * A click landing anywhere in a section still owed puts the caret on that
-   * section's typing position instead of where the click landed. Typing is
+   * A click landing anywhere in a section still owed moves the caret from
+   * where the click landed to that section's typing position. Typing is
    * matched across the whole section, so without this the character would
    * appear somewhere other than the caret that asked for it — and the caret is
    * the one thing a reader trusts about where their typing goes.
@@ -1619,8 +1617,7 @@ export class RetypeController implements vscode.Disposable {
    * Landing in the part already typed snaps too. A click there is not a request
    * to write in the middle of covered text — nothing would accept it — it is
    * someone pointing at the section they want to work on, and the answer is to
-   * be ready for them to type rather than to sit inert until they find the
-   * exact offset for themselves.
+   * be ready for them to type, sparing them the hunt for the exact offset.
    *
    * Only inside a section, and only while guidance is armed: a caret the
    * reviewer put somewhere to read, or put anywhere at all with editing on,
@@ -1723,9 +1720,8 @@ export class RetypeController implements vscode.Disposable {
       if (isClaimed(section)) continue;
       const lens = lensAt(section.start);
       // A lens renders above its line, which is where a removal's lines used
-      // to be: the count reads as a fact about the gap it is sitting in rather
-      // than about the code under it, which is the one thing the margin could
-      // never manage.
+      // to be: the count reads as a fact about the gap it is sitting in, which
+      // is the one thing the margin could never manage.
       const replaces =
         section.removedLines.length > 0
           ? ` · replaces ${lineCount(section.removedLines.length)}`
@@ -2010,7 +2006,7 @@ export class RetypeController implements vscode.Disposable {
   }
 }
 
-/** Whether a review opens with editing enabled instead of guidance armed. */
+/** Whether a review opens with editing enabled. */
 function startEditing(): boolean {
   return vscode.workspace
     .getConfiguration('copyworkcode')
@@ -2026,7 +2022,7 @@ function outcomeOf(section: Section): SectionOutcome {
 }
 
 /** Note which sections the reviewer's own writing landed in, so one they took
- * over reads as edited rather than typed when it closes. Only while editing is
+ * over reads as edited when it closes. Only while editing is
  * enabled: every other change is a formatter, an agent, or the review itself,
  * and none of those is the reviewer taking the code over. */
 function markHandEdited(

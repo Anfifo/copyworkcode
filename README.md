@@ -13,7 +13,7 @@ Everything runs locally: no account, no network calls, no data leaving the machi
 ## Why
 
 1. **Actual review.** You can't skim code you have to type. Retyping forces you to read every
-   line at the pace of understanding, not the pace of scrolling.
+   line at the pace of understanding.
 2. **Learning by writing.** Writing things down measurably improves retention. Keep building
    your understanding of your own codebase even when much of the code is AI-generated.
 3. **Proof of review.** "I looked at it" is not measurable. "I typed it" is — the extension
@@ -59,15 +59,14 @@ inserts nothing, and neither does a stray paste, a backspace, an undo, or anothe
 edit. A mistyped character can't quietly rewrite the code you're reading.
 
 Typing with the caret outside a section moves it to the nearest one still owed and judges the
-key there, and Backspace after a wrong key has nothing to take back, so the status bar says so
-rather than the editor refusing. Punctuation the AI writes that has no key on your keyboard
+key there, and Backspace after a wrong key has nothing to take back, so the status bar says so.
+Punctuation the AI writes that has no key on your keyboard
 (em dashes, curly quotes, ellipses) is matched by any punctuation key; the file keeps its own
 character.
 
 **Ctrl+E** hands the editor over: write, erase, paste and reformat, with completions and
 auto-close back. **Ctrl+E** again arms guidance and puts the caret back where the section left
-off. Neither direction loses progress, and anything you changed by hand is recorded as yours
-rather than the AI's.
+off. Neither direction loses progress, and anything you changed by hand is recorded as yours.
 
 ### Keys
 
@@ -93,8 +92,8 @@ Every one of these is a normal keybinding and can be rebound in Keyboard Shortcu
 Sections aren't a queue — click into any of them and start typing. Finishing one still moves
 you to the next, so you can also just keep typing and be led through the file.
 
-Opening another file **pauses** the review you were in rather than ending it. Come back to
-that file and it picks up exactly where you stopped, even if the file changed while it waited.
+Opening another file **pauses** the review you were in. Come back to that file and it picks up
+exactly where you stopped, even if the file changed while it waited.
 
 Lines the change removed are marked where they were, with the text on hover and a panel for
 the ones that don't fit. There is nothing to type on a deletion — <kbd>Enter</kbd>
@@ -104,7 +103,7 @@ acknowledges it.
 
 **CopyWorkCode: Open the Change Set Page** puts every changed region of every waiting file into one
 document, read top to bottom and typed in place — for the sitting where you want to see what
-a whole session did rather than open twelve tabs.
+a whole session did, laid out end to end.
 
 Removed lines appear in full where they were. Context is three lines either side, expandable.
 The keys are the ones above. There are no language features on the page — no IntelliSense, no

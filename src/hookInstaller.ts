@@ -16,10 +16,10 @@ import {
  *
  * Nothing here runs on its own. The `copyworkcode.agentCapture` setting is the
  * single expression of intent — off by default — and this module's job is to
- * make the file match it. Capture is worth an explicit choice rather than a
- * prompt: the file is global to every project and every terminal the agent
- * runs in, which is exactly why installing once is enough, and exactly why it
- * shouldn't happen because someone dismissed a notification.
+ * make the file match it. Capture is worth an explicit choice: the file is
+ * global to every project and every terminal the agent runs in, which is
+ * exactly why installing once is enough, and exactly why it shouldn't happen
+ * because someone dismissed a notification.
  *
  * User scope is deliberate. The hook script no-ops in workspaces that haven't
  * enabled the extension, so one entry covers every project without recording

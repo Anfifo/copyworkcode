@@ -113,9 +113,9 @@ A webview queue could colour the `+N −M` counts inline, which a native tree vi
 - **Why rejected:** it costs the file-icon theme (the exact thing being restored when the
   custom row icons were dropped), the container badge, and the native welcome content, all
   for inline colour on two numbers. A file-decoration provider tints the filename instead
-  and the counts stay grey (2026-08-19). This was about the queue, not about pages: the
-  change set page *is* one, and it earns it by holding a document of code rather than a list
-  of files (see design.md).
+  and the counts stay grey (2026-08-19). This was about the queue alone. The change set
+  page *is* a page, and it earns it by holding a document of code where the queue holds a
+  list of files (see design.md).
 
 ### Per-event replay as the unit of review
 

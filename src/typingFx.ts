@@ -24,7 +24,7 @@ export type AnimationLevel = 'full' | 'subtle' | 'off';
 const FRAME_MS = 40;
 
 /** Slower single-frame hold used when animation is off — long enough to read
- * as a flash rather than a flicker. */
+ * as a flash. Shorter would flicker. */
 const STATIC_MS = 250;
 
 /** A wipe stretches over one segment per this many characters, so a short
@@ -49,7 +49,7 @@ class Ladder implements vscode.Disposable {
   private entries: { range: vscode.Range; frame: number }[] = [];
   private timer?: ReturnType<typeof setInterval>;
   /** Which frames currently have ranges painted, so a tick only touches the
-   * frames that changed instead of all of them. */
+   * frames that changed. */
   private painted: boolean[];
 
   constructor(
@@ -80,7 +80,7 @@ class Ladder implements vscode.Disposable {
   }
 
   /** Drop what is in flight and animate only this range — for effects where
-   * the newest event replaces the previous one rather than trailing it. */
+   * the newest event replaces the previous one. */
   restart(range: vscode.Range): void {
     this.entries = [];
     this.push(range);
@@ -89,8 +89,8 @@ class Ladder implements vscode.Disposable {
   clear(): void {
     this.entries = [];
     this.stop();
-    // Force a repaint of every frame, not just the ones believed to be dirty:
-    // clearing has to leave nothing behind even if the bookkeeping drifted.
+    // Force a repaint of every frame: clearing has to leave nothing behind
+    // even if the dirty bookkeeping drifted.
     this.painted.fill(true);
     this.paint();
   }
@@ -163,15 +163,15 @@ export class TypingFx implements vscode.Disposable {
   }
 
   /** A keystroke landed: the run it produced flashes and fades in, so the
-   * character reads as struck into place rather than simply appearing. */
+   * character reads as struck into place. */
   strike(range: vscode.Range): void {
     this.strikes.push(range);
   }
 
   /**
    * A run was filled in without typing it (a word, a line, a whole section).
-   * The same strike decay sweeps across it left to right instead of lighting
-   * the run at once, so a fill reads as filled in rather than blinked in.
+   * The same strike decay sweeps across it left to right, so a fill reads as
+   * filled in. Lighting the run at once would read as a blink.
    */
   wipe(range: vscode.Range): void {
     const document = this.document;
@@ -240,7 +240,7 @@ export class TypingFx implements vscode.Disposable {
     // text colour — would paint over syntax highlighting. Opacity applies to
     // the whole span, background included, so the flash is deliberately
     // strongest on the frame where the character is dimmest: the glow hands
-    // off to the character rather than competing with it.
+    // off to the character.
     const strikeFrames: vscode.DecorationRenderOptions[] =
       this.level === 'full'
         ? [

@@ -21,7 +21,7 @@ import { ReviewLog } from './reviewState';
  * region in it, read top to bottom and retyped in place without opening a
  * single editor.
  *
- * This is a second review surface, not a preview of the first one. Typing here
+ * This is a second review surface. Typing here
  * counts for exactly what typing in an editor counts for — the same outcomes
  * per region, the same record in the review log, the same baseline advance —
  * and the editor review stays the answer for reading a change with the language
@@ -59,7 +59,7 @@ import { ReviewLog } from './reviewState';
  * page had on it — and only the colliding file is affected, never the rest of
  * the page.
  *
- * Progress lives here rather than in the webview, so the page can be hidden and
+ * Progress lives here, outside the webview, so the page can be hidden and
  * shown without losing it. Closing the page is a different thing: the state
  * goes with it, because unclaimed progress with no surface showing it is
  * progress nobody can see, reach, or finish.
@@ -139,9 +139,9 @@ export class ChangeSetPanel implements vscode.Disposable {
   }
 
   /**
-   * Another surface took this file over. The regions come back owed rather than
-   * disappearing, because the file is still part of the change set and still has
-   * to be read — it is only being reviewed somewhere else now.
+   * Another surface took this file over. The regions come back owed, because
+   * the file is still part of the change set and still has to be read — it is
+   * only being reviewed somewhere else now.
    */
   dropFile(file: string): void {
     const dropped = this.review.dropFile(file);
@@ -156,10 +156,9 @@ export class ChangeSetPanel implements vscode.Disposable {
   // --- payload ----------------------------------------------------------------
 
   /**
-   * Rebuild the document from the queue as it stands. An explicit gesture, not
-   * a reaction to the queue changing: the page is a sitting's worth of reading,
-   * and rebuilding it under the reviewer would move the text they were part way
-   * through typing.
+   * Rebuild the document from the queue as it stands. An explicit gesture: the
+   * page is a sitting's worth of reading, and rebuilding it whenever the queue
+   * changed would move the text they were part way through typing.
    */
   private build(): void {
     // Rebuilding is a fresh read, so whatever the rows were saying about this
@@ -251,9 +250,9 @@ export class ChangeSetPanel implements vscode.Disposable {
       return;
     }
     if (resolution.takesOver) {
-      // Called on the first gesture that lands rather than when the page opens:
-      // opening it is reading, and reading a change set should not end a review
-      // the reviewer left running in an editor.
+      // Called on the first gesture that lands. Opening the page is reading,
+      // and reading a change set should not end a review the reviewer left
+      // running in an editor.
       this.review.takeOver(message.file);
       await this.release(message.file);
     }
@@ -293,16 +292,16 @@ export class ChangeSetPanel implements vscode.Disposable {
    * it, since the editor review answers for a file before the page does.
    *
    * A handover that does not take — no baseline any more, another start already
-   * in flight — leaves the page holding the file exactly as it was, rather than
-   * a file neither surface is reviewing.
+   * in flight — leaves the page holding the file exactly as it was, so the file
+   * keeps a surface reviewing it.
    */
   private async handOver(file: string, index: number): Promise<void> {
     const handover = this.review.handOver(file, index);
     if (!handover) return;
     // Marked as gone before the await, so the editor review's own start — which
     // comes back through `dropFile` — finds a file the page has already given
-    // up rather than one to take away from it. The row it leaves behind needs
-    // no telling from here either: starting that review is what redraws it.
+    // up. The row it leaves behind needs no telling from here either: starting
+    // that review is what redraws it.
     if (!(await this.adopt(file, handover))) {
       this.review.unhand(file);
       return;
@@ -311,7 +310,7 @@ export class ChangeSetPanel implements vscode.Disposable {
   }
 
   /**
-   * The reviewer asked to write their own code, by key rather than by button.
+   * The reviewer asked to write their own code, by key.
    * Which region that means is the page's to say — it holds the caret — so the
    * command is a question, and the answer comes back as `editHere`.
    */

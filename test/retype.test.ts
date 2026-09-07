@@ -68,7 +68,8 @@ test('any punctuation key stands in for typographic punctuation', () => {
   assert.deepEqual(engine.handleInput('-'), { kind: 'insert', text: ' \u2014' });
   assert.deepEqual(engine.handleInput('"'), { kind: 'insert', text: ' \u201C' });
   engine.handleInput('b');
-  // Any punctuation, not only the lookalike: the file keeps its own character.
+  // Any punctuation key matches, lookalike or otherwise; the file keeps its
+  // own character.
   assert.deepEqual(engine.handleInput('.'), { kind: 'insert', text: '\u201D' });
   assert.deepEqual(engine.handleInput(','), { kind: 'insert', text: '\u2026' });
   assert.equal(engine.done, true);
@@ -165,7 +166,7 @@ test('fillWord stops at a line break instead of filling the word past it', () =>
   const engine = new RetypeEngine('a\n  bc d');
   engine.handleInput('a');
   // The break and the indentation behind it are the whole gesture: crossing a
-  // line and typing its first word are two moves, not one.
+  // line and typing its first word are two separate moves.
   assert.equal(engine.fillWord(), '\n  ');
   assert.equal(engine.fillWord(), 'bc');
   assert.equal(engine.fillWord(), ' d');
@@ -194,7 +195,7 @@ test('a visible character applies at most one pending line break', () => {
   const engine = new RetypeEngine('a\n\nb');
   engine.handleInput('a');
   // Typing 'b' cannot reach it: only the first break and its indentation are
-  // pending, and what follows them is another break rather than 'b'.
+  // pending, and what follows them is another break; 'b' comes after that.
   assert.deepEqual(engine.handleInput('b'), { kind: 'reject' });
   assert.deepEqual(engine.handleInput('\n'), { kind: 'insert', text: '\n' });
   assert.deepEqual(engine.handleInput('b'), { kind: 'insert', text: '\nb' });

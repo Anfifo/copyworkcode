@@ -13,7 +13,7 @@ import { runTests } from '@vscode/test-electron';
  */
 async function main(): Promise<void> {
   // Inherited from editor-integrated terminals; it makes the spawned test
-  // editor start as a plain Node process instead of booting the workbench.
+  // editor start as a plain Node process, skipping the workbench.
   delete process.env.ELECTRON_RUN_AS_NODE;
 
   const extensionDevelopmentPath = path.resolve(__dirname, '..', '..');
@@ -95,7 +95,7 @@ async function main(): Promise<void> {
     'keep\nfirst gone\nsecond gone\ntail\n'
   );
   // A deletion confirmed while the review carries on: the mark, and the hover
-  // behind it, go quiet with the section rather than outliving it.
+  // behind it, go quiet the moment the section does.
   fs.writeFileSync(path.join(fixture, 'cleared.ts'), 'k1\nk3\nadded\n');
   fs.writeFileSync(path.join(baselines, 'cleared.ts'), 'k1\ngone\nk3\n');
   // Clicked back into text already typed, which is a click into the section

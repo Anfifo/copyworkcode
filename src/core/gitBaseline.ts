@@ -4,14 +4,14 @@ import * as path from 'path';
 
 /**
  * Git as a baseline source: the side the review compares against is the
- * file's content at a revision (the working tree against HEAD by default)
- * instead of the last-reviewed snapshot. This covers what the snapshot store
+ * file's content at a revision (the working tree against HEAD by default).
+ * This covers what the snapshot store
  * cannot — changes that landed while nothing was tracking them, so there is
  * no snapshot to diff against.
  *
  * Strictly read-only: nothing here writes to the repository. Git runs as a
- * child process rather than through another extension's API, so the feature
- * has no dependency beyond git itself, and every call degrades to "nothing to
+ * child process, so the feature has no dependency beyond git itself (another
+ * extension's API would be one), and every call degrades to "nothing to
  * report" when git is missing or the folder is not a repository.
  */
 
@@ -51,9 +51,9 @@ function git(root: string, args: string[]): GitRun {
 
 /**
  * Every file that differs from `ref`, with its line counts. `undefined` means
- * the comparison itself is unavailable — no git, not a repository, or no such
- * revision (an empty repo has no HEAD) — as opposed to an empty array, which
- * means the working tree matches the revision.
+ * the comparison itself is unavailable — no git, no repository, or no such
+ * revision (an empty repo has no HEAD). An empty array means the working tree
+ * matches the revision.
  *
  * Binary files are left out: they have no reviewable text. Files git does not
  * track yet are included, minus anything the ignore rules exclude, so a file

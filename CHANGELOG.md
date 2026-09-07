@@ -28,7 +28,7 @@ First release. The review loop works end to end; the README describes how it is 
 - Retype a change in a real editor. A matched keystroke inserts nothing and lifts the
   dimming, so typing a change out exactly leaves the file byte-identical.
 - Guidance is armed by default, with the editor read-only for the session. Ctrl+E hands the
-  editor over and back; anything written by hand is recorded as edited rather than typed.
+  editor over and back; anything written by hand is recorded as edited.
 - Sections are a set, not a sequence. Click into any of them; finishing one leads to the next.
 - Fills and skips at every scale: the next word (Tab), the rest of a line (Alt+F), a section
   (Alt+S), a whole file, and auto-skip globs. Filled text is never counted as typed.
@@ -37,8 +37,7 @@ First release. The review loop works end to end; the README describes how it is 
 - The change set page: every changed region of every file as one syntax-coloured document,
   typed in place. Ctrl+E hands a file from the page to an editor review.
 - A review queue in the activity bar, biggest change first, with the row under review tinted.
-- Git as a baseline: compare the working tree against a revision instead of the last-reviewed
-  snapshot.
+- Git as a baseline: switch the comparison from the last-reviewed snapshot to a git revision.
 - Agent capture, off until turned on. Edits made by Claude Code are recorded through its hooks
   by one entry in `~/.claude/settings.json`, removed again when capture is turned off.
   Credentials, keys and environment files are never copied.

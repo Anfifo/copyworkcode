@@ -40,7 +40,7 @@ const SENSITIVE_DATA_NAMES: RegExp[] = [
   /(^|[._-])credentials?([._-]|$)/,
 ];
 
-/** Extensions that hold data rather than code. '' covers extensionless files. */
+/** Extensions of files that hold data. '' covers extensionless files. */
 const DATA_EXTENSIONS = new Set([
   '',
   'json',

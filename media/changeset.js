@@ -104,8 +104,8 @@
         return;
       }
       case 'askEdit':
-        // The key was pressed rather than the button, so the region it meant is
-        // this page's to name.
+        // The key was pressed, so the region it meant is this page's to name;
+        // a button would carry its own.
         if (active) {
           vscode.postMessage({
             type: 'editHere',
@@ -357,8 +357,8 @@
 
   /**
    * The row the next keystroke lands on: the first one the position is inside,
-   * counting the end of a line as still on it rather than at the head of the
-   * next one — a line break is typed where the line ends.
+   * counting the end of a line as still on it — a line break is typed where
+   * the line ends.
    */
   function rowAt(rows, position) {
     for (let i = 0; i < rows.length; i++) {
@@ -446,9 +446,9 @@
         })
       );
     }
-    // The page types the change as written and nothing else, so a reviewer's
-    // own version is written where code is written: this hands the file to an
-    // editor review, at this region, with everything covered here still covered
+    // The page only types the change as written, so a reviewer's own version
+    // is written where code is written: this hands the file to an editor
+    // review, at this region, with everything covered here still covered
     // there.
     lens.appendChild(
       action('secondary', 'Write it yourself (Ctrl+E)', {
@@ -587,7 +587,8 @@
     }
     if (event.key === 'Backspace') {
       // The reflex after a wrong key. Nothing landed, so there is nothing to
-      // take back, and the page says so rather than scrolling.
+      // take back, and the page says so. Left to the browser, the key would
+      // scroll.
       event.preventDefault();
       status.textContent = 'nothing to erase — a wrong key changes nothing here.';
       return;
