@@ -1,24 +1,26 @@
-import * as fs from 'fs';
 import * as vscode from 'vscode';
-import { DATA_DIR, dataDir } from './core/paths';
-import { ensureLocalGitExclude } from './core/gitExclude';
+import { forgetWorkspace, isRegistered, registerWorkspace } from './core/dataHome';
 
 /** Root folder of the workspace the extension operates on, if any. */
 export function workspaceRoot(): string | undefined {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 }
 
-/** A workspace is enabled once its data directory exists. */
+/** A workspace is enabled once it is registered under the data home. */
 export function isEnabled(root: string): boolean {
-  return fs.existsSync(dataDir(root));
+  return isRegistered(root);
 }
 
 /**
- * Create the data directory and keep it out of git via the repo-local
- * exclude list — invisible to `git status` and to collaborators, with no
- * change to the project's `.gitignore` and nothing to ask the user.
+ * Register the workspace under the data home. Nothing is written into the
+ * project folder or its repository, so there is nothing to hide from git and
+ * nothing to ask the user.
  */
 export function enableWorkspace(root: string): void {
-  fs.mkdirSync(dataDir(root), { recursive: true });
-  ensureLocalGitExclude(root, `${DATA_DIR}/`);
+  registerWorkspace(root);
+}
+
+/** Delete every trace of the workspace: baselines, events and review log. */
+export function disableWorkspace(root: string): void {
+  forgetWorkspace(root);
 }

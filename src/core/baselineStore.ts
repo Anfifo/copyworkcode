@@ -5,7 +5,8 @@ import { hasDebt } from './diff';
 
 /**
  * Per-file snapshots of the last-reviewed content, stored as one file per
- * source file under `.copyworkcode/baselines/`. Review debt for a file is the
+ * source file in the workspace's `baselines/` folder under the data home.
+ * Review debt for a file is the
  * diff between its baseline and its current content; completing (or skipping)
  * a review advances the baseline.
  *

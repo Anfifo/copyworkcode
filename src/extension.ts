@@ -13,6 +13,7 @@ import { matchesAny } from './core/glob';
 import { advanceBaseline, readBaseline } from './core/baselineStore';
 import { hasDebt } from './core/diff';
 import * as workspaceData from './workspaceData';
+import { dataHome } from './core/dataHome';
 
 let queue: EventQueue | undefined;
 let log: ReviewLog | undefined;
@@ -20,6 +21,8 @@ let source: DebtSource | undefined;
 let tree: DebtTreeProvider | undefined;
 let retype: RetypeController | undefined;
 let changeSet: ChangeSetPanel | undefined;
+/** Everything startTracking created, so it can be undone as one. */
+let tracking: vscode.Disposable | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
@@ -42,6 +45,9 @@ export function activate(context: vscode.ExtensionContext): void {
       startTracking(root, context);
     }),
 
+    vscode.commands.registerCommand('copyworkcode.forgetWorkspace', () =>
+      forgetWorkspaceData()
+    ),
     vscode.commands.registerCommand('copyworkcode.installAgentHook', () =>
       setAgentCapture(true)
     ),
@@ -183,8 +189,7 @@ function applyAgentCapture(context: vscode.ExtensionContext): void {
     installed:
       'CopyWorkCode: agent capture on. Sessions started from now on will record their edits.',
     repointed: 'CopyWorkCode: agent capture hook updated to this version.',
-    removed:
-      'CopyWorkCode: agent capture off, hook removed. Review history stays in .copyworkcode/.',
+    removed: `CopyWorkCode: agent capture off, hook removed. Review history stays under ${dataHome()}.`,
   } as const;
   void vscode.window.showInformationMessage(messages[result]);
 }
@@ -228,8 +233,30 @@ function rowProgress(file: string): RowProgress | undefined {
   return page ? { claimed: page.claimed, total: page.total, state: 'page' } : undefined;
 }
 
+/**
+ * Delete the workspace's review data and stop tracking it. Modal, because it
+ * is the one destructive command: baselines, captured events and the review
+ * log go together, and there is no undo. The workspace can be enabled again
+ * afterwards, starting from nothing.
+ */
+async function forgetWorkspaceData(): Promise<void> {
+  const root = workspaceData.workspaceRoot();
+  if (!root || !workspaceData.isEnabled(root)) return;
+  const choice = await vscode.window.showWarningMessage(
+    'CopyWorkCode: delete all review data for this workspace? Baselines, captured events and the review log are removed. This cannot be undone.',
+    { modal: true },
+    'Delete'
+  );
+  if (choice !== 'Delete') return;
+  stopTracking();
+  workspaceData.disableWorkspace(root);
+  void vscode.window.showInformationMessage(
+    'CopyWorkCode: review data for this workspace deleted.'
+  );
+}
+
 function startTracking(root: string, context: vscode.ExtensionContext): void {
-  if (queue) return; // already tracking this window
+  if (tracking) return; // already tracking this window
   void vscode.commands.executeCommand('setContext', 'copyworkcode.enabled', true);
 
   queue = new EventQueue(root);
@@ -261,7 +288,7 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
   });
   tree.attach(view);
 
-  context.subscriptions.push(
+  tracking = vscode.Disposable.from(
     queue,
     log,
     source,
@@ -293,9 +320,19 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
       if (e.affectsConfiguration('copyworkcode.gitRef')) tree?.refresh();
     })
   );
+  context.subscriptions.push({ dispose: () => stopTracking() });
 
   queue.start();
   tree.refresh();
+}
+
+/** Undo startTracking: dispose every tracker and clear the enabled context. */
+function stopTracking(): void {
+  if (!tracking) return;
+  tracking.dispose();
+  tracking = undefined;
+  queue = log = source = tree = retype = changeSet = undefined;
+  void vscode.commands.executeCommand('setContext', 'copyworkcode.enabled', false);
 }
 
 function autoSkip(root: string, events: ChangeEvent[]): void {

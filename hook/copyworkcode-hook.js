@@ -10,8 +10,8 @@
 // - PostToolUse: append a change event to the workspace's event log.
 //
 // Three hard requirements shape this file:
-// - It only records in workspaces that opted in (the data directory exists),
-//   so it is safe to install at user scope for all projects.
+// - It only records in workspaces that opted in (registered under the data
+//   home), so it is safe to install at user scope for all projects.
 // - It never copies the content of a credentials file, in either direction:
 //   no baseline snapshot and no text in the event. The occurrence is still
 //   recorded, so an agent touching one is visible, but the secret is not
@@ -28,7 +28,8 @@ const fs = require('fs');
 const path = require('path');
 
 const core = (name) => require(path.join(__dirname, '..', 'out', 'core', name));
-const { dataDir, eventsPath } = core('paths');
+const { registeredRootFor } = core('dataHome');
+const { eventsPath } = core('paths');
 const { seedBaseline } = core('baselineStore');
 const { isSensitivePath } = core('sensitive');
 
@@ -107,13 +108,15 @@ function main(raw) {
   if (!FILE_TOOLS.has(payload.tool_name)) return;
   if (!payload.cwd) return;
 
-  const root = payload.cwd;
-  if (!fs.existsSync(dataDir(root))) return; // workspace not enabled
+  // The agent may have been started in a subfolder of the workspace the editor
+  // has open; the nearest registered folder at or above it is the one.
+  const root = registeredRootFor(payload.cwd);
+  if (!root) return; // no enabled workspace here
 
   const input = payload.tool_input || {};
   const file = targetFile(input);
   if (!file) return;
-  const absolute = path.resolve(root, file);
+  const absolute = path.resolve(payload.cwd, file);
 
   if (payload.hook_event_name === 'PreToolUse') {
     // No baseline for a credentials file: the snapshot would be a verbatim copy

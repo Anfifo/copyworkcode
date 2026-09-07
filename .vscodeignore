@@ -1,7 +1,6 @@
 .vscode/**
 .vscode-test/**
 .claude/**
-.copyworkcode/**
 src/**
 test/**
 test-integration/**

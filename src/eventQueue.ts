@@ -1,14 +1,14 @@
 import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { ChangeEvent } from './types';
-import { DATA_DIR, EVENTS_FILE, eventsPath } from './core/paths';
+import { EVENTS_FILE, dataDir, eventsPath } from './core/paths';
 import { parseEventChunk } from './core/eventLog';
 
 /**
- * Tails `.copyworkcode/events.jsonl` for the workspace: reads everything on
- * startup (catching up on sessions that ran while the editor was closed), then
- * follows appends via a file watcher. Events are deduplicated by id, and the
- * log itself is never modified.
+ * Tails the workspace's `events.jsonl` under the data home: reads everything
+ * on startup (catching up on sessions that ran while the editor was closed),
+ * then follows appends via a file watcher. Events are deduplicated by id, and
+ * the log itself is never modified.
  */
 export class EventQueue implements vscode.Disposable {
   readonly events: ChangeEvent[] = [];
@@ -24,8 +24,10 @@ export class EventQueue implements vscode.Disposable {
 
   start(): void {
     this.readNew();
+    // The log sits outside the workspace, so the watcher is anchored on its
+    // folder rather than on the workspace root.
     this.watcher = vscode.workspace.createFileSystemWatcher(
-      new vscode.RelativePattern(this.root, `${DATA_DIR}/${EVENTS_FILE}`)
+      new vscode.RelativePattern(vscode.Uri.file(dataDir(this.root)), EVENTS_FILE)
     );
     this.watcher.onDidChange(() => this.readNew());
     this.watcher.onDidCreate(() => this.readNew());

@@ -19,7 +19,7 @@
     {
       "label": "prepare demo",
       "dependsOn": ["npm: compile", "seed demo workspace"],
-      "dependsOrder": "parallel",
+      "dependsOrder": "sequence",
       "problemMatcher": []
     }
   ]

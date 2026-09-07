@@ -4,23 +4,39 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { HOME_ENV, registerWorkspace, workspaceDir } from '../src/core/dataHome';
 
 const HOOK = path.resolve(__dirname, '..', '..', 'hook', 'copyworkcode-hook.js');
 
+/**
+ * The hook is spawned as the agent would spawn it, inheriting this process's
+ * environment. Each test points the data home at a fresh temp folder first, so
+ * the hook under test and the assertions below compute the same store and the
+ * real one is never touched.
+ */
 function runHook(payload: unknown): { status: number | null } {
   const raw = typeof payload === 'string' ? payload : JSON.stringify(payload);
   const result = spawnSync(process.execPath, [HOOK], { input: raw });
   return { status: result.status };
 }
 
+function isolatedHome(): void {
+  process.env[HOME_ENV] = fs.mkdtempSync(path.join(os.tmpdir(), 'cwc-hook-home-'));
+}
+
 function enabledWorkspace(): string {
+  isolatedHome();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cwc-hook-'));
-  fs.mkdirSync(path.join(root, '.copyworkcode'));
+  registerWorkspace(root);
   return root;
 }
 
+function baselinePath(root: string, key: string): string {
+  return path.join(workspaceDir(root), 'baselines', key);
+}
+
 function readEvents(root: string): any[] {
-  const file = path.join(root, '.copyworkcode', 'events.jsonl');
+  const file = path.join(workspaceDir(root), 'events.jsonl');
   if (!fs.existsSync(file)) return [];
   return fs
     .readFileSync(file, 'utf8')
@@ -30,7 +46,7 @@ function readEvents(root: string): any[] {
 }
 
 function payload(
-  root: string,
+  cwd: string,
   hookEvent: 'PreToolUse' | 'PostToolUse',
   toolName: string,
   toolInput: Record<string, unknown>
@@ -38,7 +54,7 @@ function payload(
   return {
     session_id: 'sess-1',
     transcript_path: '/tmp/transcript.jsonl',
-    cwd: root,
+    cwd,
     hook_event_name: hookEvent,
     tool_name: toolName,
     tool_input: toolInput,
@@ -60,9 +76,7 @@ test('PreToolUse snapshots the pre-change content as the baseline', () => {
     })
   );
   assert.equal(status, 0);
-
-  const baseline = path.join(root, '.copyworkcode', 'baselines', 'src%2Fa.ts');
-  assert.equal(fs.readFileSync(baseline, 'utf8'), 'original\n');
+  assert.equal(fs.readFileSync(baselinePath(root, 'src%2Fa.ts'), 'utf8'), 'original\n');
 });
 
 test('PreToolUse never overwrites an existing baseline', () => {
@@ -73,8 +87,7 @@ test('PreToolUse never overwrites an existing baseline', () => {
   fs.writeFileSync(file, 'v2\n');
   runHook(payload(root, 'PreToolUse', 'Edit', { file_path: file, old_string: '', new_string: '' }));
 
-  const baseline = path.join(root, '.copyworkcode', 'baselines', 'a.ts');
-  assert.equal(fs.readFileSync(baseline, 'utf8'), 'v1\n');
+  assert.equal(fs.readFileSync(baselinePath(root, 'a.ts'), 'utf8'), 'v1\n');
 });
 
 test('PreToolUse for a file that does not exist yet records an empty baseline', () => {
@@ -82,8 +95,7 @@ test('PreToolUse for a file that does not exist yet records an empty baseline', 
   const file = path.join(root, 'new.ts');
   runHook(payload(root, 'PreToolUse', 'Write', { file_path: file, content: 'fresh\n' }));
 
-  const baseline = path.join(root, '.copyworkcode', 'baselines', 'new.ts');
-  assert.equal(fs.readFileSync(baseline, 'utf8'), '');
+  assert.equal(fs.readFileSync(baselinePath(root, 'new.ts'), 'utf8'), '');
 });
 
 test('PostToolUse appends an event with change content and intent pointers', () => {
@@ -150,13 +162,34 @@ test('relative file paths resolve against cwd', () => {
   assert.equal(events[0].file, path.join(root, 'src', 'rel.ts'));
 });
 
+test('a session started in a subfolder records into the workspace above it', () => {
+  const root = enabledWorkspace();
+  const cwd = path.join(root, 'packages', 'app');
+  fs.mkdirSync(cwd, { recursive: true });
+  const file = path.join(cwd, 'src', 'x.ts');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, 'x1\n');
+
+  runHook(payload(cwd, 'PreToolUse', 'Edit', { file_path: 'src/x.ts', old_string: '', new_string: '' }));
+  runHook(payload(cwd, 'PostToolUse', 'Edit', { file_path: 'src/x.ts', old_string: 'x1', new_string: 'x2' }));
+
+  assert.equal(
+    fs.readFileSync(baselinePath(root, 'packages%2Fapp%2Fsrc%2Fx.ts'), 'utf8'),
+    'x1\n'
+  );
+  const events = readEvents(root);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].file, file);
+});
+
 test('does nothing in a workspace that has not enabled the extension', () => {
+  isolatedHome();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cwc-disabled-'));
   const file = path.join(root, 'a.ts');
   fs.writeFileSync(file, 'x\n');
   runHook(payload(root, 'PreToolUse', 'Edit', { file_path: file, old_string: '', new_string: '' }));
   runHook(payload(root, 'PostToolUse', 'Edit', { file_path: file, old_string: '', new_string: '' }));
-  assert.equal(fs.existsSync(path.join(root, '.copyworkcode')), false);
+  assert.equal(fs.existsSync(workspaceDir(root)), false);
 });
 
 test('ignores non-file tools', () => {
@@ -170,10 +203,7 @@ test('files outside the workspace are not baselined', () => {
   const outside = path.join(os.tmpdir(), 'cwc-outside.ts');
   fs.writeFileSync(outside, 'x\n');
   runHook(payload(root, 'PreToolUse', 'Edit', { file_path: outside, old_string: '', new_string: '' }));
-  assert.equal(
-    fs.existsSync(path.join(root, '.copyworkcode', 'baselines')),
-    false
-  );
+  assert.equal(fs.existsSync(path.join(workspaceDir(root), 'baselines')), false);
 });
 
 test('corrupt stdin exits 0 and writes nothing', () => {
@@ -202,7 +232,7 @@ test('a credentials file gets no baseline snapshot', () => {
       new_string: 'rotated',
     })
   );
-  assert.equal(fs.existsSync(path.join(root, '.copyworkcode', 'baselines')), false);
+  assert.equal(fs.existsSync(path.join(workspaceDir(root), 'baselines')), false);
 });
 
 test('a credentials file is recorded as an occurrence without its content', () => {
@@ -219,7 +249,7 @@ test('a credentials file is recorded as an occurrence without its content', () =
   assert.equal(events[0].file, file);
   assert.equal(events[0].change, undefined);
   // The point of the exclusion: the secret is nowhere in the log, in any form.
-  const raw = fs.readFileSync(path.join(root, '.copyworkcode', 'events.jsonl'), 'utf8');
+  const raw = fs.readFileSync(path.join(workspaceDir(root), 'events.jsonl'), 'utf8');
   assert.equal(raw.includes('super-secret'), false);
 });
 

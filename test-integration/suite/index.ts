@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { countLines } from '../../src/core/diff';
+import { baselinesDir, statePath } from '../../src/core/paths';
 import { badgeLabel, removalHover, removalRanges } from '../../src/removalMark';
 import { removedUri } from '../../src/retypeController';
 
@@ -22,12 +23,9 @@ export async function run(): Promise<void> {
   const ws = vscode.workspace.workspaceFolders![0].uri.fsPath;
   const file = (name: string) => path.join(ws, name);
   const baselineOf = (name: string) =>
-    fs.readFileSync(
-      path.join(ws, '.copyworkcode', 'baselines', encodeURIComponent(name)),
-      'utf8'
-    );
+    fs.readFileSync(path.join(baselinesDir(ws), encodeURIComponent(name)), 'utf8');
   const onDisk = (name: string) => fs.readFileSync(file(name), 'utf8');
-  const stateFile = path.join(ws, '.copyworkcode', 'state.json');
+  const stateFile = statePath(ws);
   const reviews = () =>
     JSON.parse(fs.readFileSync(stateFile, 'utf8')).reviews as {
       file: string;

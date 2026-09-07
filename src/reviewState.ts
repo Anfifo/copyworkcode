@@ -4,7 +4,7 @@ import { ReviewRecord } from './types';
 import { statePath } from './core/paths';
 
 /**
- * The personal review log, persisted to `.copyworkcode/state.json`: one record
+ * The personal review log, persisted to the workspace's `state.json`: one record
  * per completed review (typed or skipped), append-only. This is a private
  * mirror for the user's own discipline — plain local JSON, no tamper-evidence
  * by design (see design.md, "Review stats").

@@ -1,7 +1,7 @@
 /**
  * A single AI-made (or suspected AI-made) change to a file.
  *
- * Events are append-only records in `.copyworkcode/events.jsonl`. They are not
+ * Events are append-only records in the workspace's `events.jsonl`. They are not
  * the unit of review — review debt is the per-file diff against the baseline
  * snapshot — but they annotate that diff: they mark which files changed at the
  * hand of an agent and carry the intent pointers for those changes.

@@ -1,17 +1,18 @@
 import * as path from 'path';
+import { workspaceDir } from './dataHome';
 
 /**
- * Layout of the per-workspace runtime data directory. The capture hook
+ * Layout of a workspace's runtime data folder, which lives under the data
+ * home (see dataHome.ts), never inside the workspace. The capture hook
  * requires this module's compiled output, so the extension and the hook read
  * every name here from one place.
  */
-export const DATA_DIR = '.copyworkcode';
 export const EVENTS_FILE = 'events.jsonl';
 const STATE_FILE = 'state.json';
 const BASELINES_DIR = 'baselines';
 
 export function dataDir(root: string): string {
-  return path.join(root, DATA_DIR);
+  return workspaceDir(root);
 }
 
 export function eventsPath(root: string): string {

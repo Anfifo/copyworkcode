@@ -45,6 +45,11 @@
         "category": "CopyWorkCode"
       },
       {
+        "command": "copyworkcode.forgetWorkspace",
+        "title": "Delete Review Data for this Workspace",
+        "category": "CopyWorkCode"
+      },
+      {
         "command": "copyworkcode.installAgentHook",
         "title": "Turn On Agent Capture",
         "category": "CopyWorkCode"
@@ -277,6 +282,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "copyworkcode.forgetWorkspace",
+          "when": "copyworkcode.enabled"
+        },
         {
           "command": "copyworkcode.installAgentHook",
           "when": "!config.copyworkcode.agentCapture"

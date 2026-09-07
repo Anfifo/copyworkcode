@@ -3,9 +3,9 @@
 
 // Rebuilds demo-workspace/ from scratch: a small workspace with pre-made
 // baselines and pending review debt, one file per interesting review case.
-// Because the data directory exists, the workspace counts as enabled — open
-// it in an extension development host and the review tree is already
-// populated, no agent session needed.
+// Because the workspace is registered under the data home, it counts as
+// enabled — open it in an extension development host and the review tree is
+// already populated, no agent session needed.
 //
 // Every file here is also a place to try both sides of a review: typing the
 // change out to watch wrong keys bounce off, and pressing Ctrl+E to write a
@@ -18,10 +18,26 @@
 const fs = require('fs');
 const path = require('path');
 
+// The store lives under the data home and is reached through the extension's
+// compiled core modules, so the extension has to be compiled first.
+function core(name) {
+  try {
+    return require(path.join(__dirname, '..', 'out', 'core', name));
+  } catch {
+    console.error('demo:seed needs the compiled extension: run `npm run compile` first.');
+    process.exit(1);
+  }
+}
+const { forgetWorkspace, registerWorkspace } = core('dataHome');
+const { baselinesDir } = core('paths');
+
 const root = path.join(__dirname, '..', 'demo-workspace');
-const baselines = path.join(root, '.copyworkcode', 'baselines');
 
 reset(root);
+fs.mkdirSync(root, { recursive: true });
+forgetWorkspace(root);
+registerWorkspace(root);
+const baselines = baselinesDir(root);
 fs.mkdirSync(baselines, { recursive: true });
 
 // Clear the workspace out. An editor watching the folder — which it is, since

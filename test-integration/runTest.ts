@@ -3,6 +3,8 @@ import * as os from 'os';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { runTests } from '@vscode/test-electron';
+import { HOME_ENV, registerWorkspace } from '../src/core/dataHome';
+import { baselinesDir, statePath } from '../src/core/paths';
 
 /**
  * Boots a real editor instance against a fixture workspace that already has
@@ -20,7 +22,13 @@ async function main(): Promise<void> {
   const extensionTestsPath = path.resolve(__dirname, 'suite');
 
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'cwc-fixture-'));
-  const baselines = path.join(fixture, '.copyworkcode', 'baselines');
+
+  // A data home of the run's own, handed to the editor under test through its
+  // environment, so neither side ever touches the real one.
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cwc-home-'));
+  process.env[HOME_ENV] = home;
+  registerWorkspace(fixture);
+  const baselines = baselinesDir(fixture);
   fs.mkdirSync(baselines, { recursive: true });
 
   // Reviewed by typing in the suite.
@@ -132,13 +140,12 @@ async function main(): Promise<void> {
     extensionDevelopmentPath,
     extensionTestsPath,
     launchArgs: [fixture, '--disable-extensions', '--disable-workspace-trust'],
+    extensionTestsEnv: { [HOME_ENV]: home },
   });
 
   // Belt and braces: verify the suite's side effects from outside the editor
   // process, so a suite that silently failed to run cannot pass.
-  const state = JSON.parse(
-    fs.readFileSync(path.join(fixture, '.copyworkcode', 'state.json'), 'utf8')
-  );
+  const state = JSON.parse(fs.readFileSync(statePath(fixture), 'utf8'));
   if (state.reviews.length !== 23) {
     throw new Error(
       `expected 23 review records in the fixture, found ${state.reviews.length}`
@@ -153,8 +160,7 @@ async function main(): Promise<void> {
 
 /**
  * Turns the fixture into a repository with one commit, so the suite can drive
- * the git comparison mode. The runtime data directory is excluded the same way
- * enabling a workspace excludes it, keeping it out of the git-mode queue.
+ * the git comparison mode.
  */
 function commitFixture(fixture: string): void {
   const git = (...args: string[]): void => {
@@ -167,7 +173,6 @@ function commitFixture(fixture: string): void {
   git('config', 'user.email', 'fixture@example.com');
   git('config', 'user.name', 'Fixture');
   git('config', 'commit.gpgsign', 'false');
-  fs.writeFileSync(path.join(fixture, '.git', 'info', 'exclude'), '.copyworkcode/\n');
   git('add', '-A');
   git('commit', '-q', '-m', 'fixture');
 }
