@@ -458,11 +458,9 @@ export async function run(): Promise<void> {
   assert.equal(reviews()[13].hunksTyped, 2, 'both sections count as typed');
 
   // --- Clicking into the middle of a section and typing ---------------------
-  // The gesture every reviewer makes first. Guidance used to need the caret on
-  // the exact next character, so a click anywhere else in the changed code sent
-  // the keystrokes to the plain editor and they went in *beside* the text they
-  // were meant to reproduce. Typing anywhere in what a section still owes has
-  // to be matched, and the caret has to end up where the typing is going.
+  // The gesture every reviewer makes first: click into the middle of a section
+  // and type. Anything typed in what a section still owes is matched, and the
+  // caret ends up where the typing is going.
   const inbox = await review('inbox.ts');
   await clickAt('inbox.ts', inbox.getText().indexOf('de the'));
   const caret = editorOf('inbox.ts').selection.active;
@@ -917,11 +915,8 @@ export async function run(): Promise<void> {
 
   // --- A review that opens on a deletion ------------------------------------
   // Sections are walked in file order, so a file whose first change is a
-  // deletion opens on a section with nothing in it to reproduce. The keystroke
-  // that follows used to fall through to the editor, where the session
-  // read-only flag answered it — the workbench saying something true about the
-  // buffer and nothing about the one gesture the section wants. The review
-  // answers for its own sections now, and Enter is that gesture.
+  // deletion opens on a section with nothing to reproduce. The review answers
+  // the keystroke itself, and Enter is the gesture it wants.
   const deletionFirst = await review('deletionfirst.ts');
   assert.equal(
     deletionFirst.offsetAt(editorOf('deletionfirst.ts').selection.active),

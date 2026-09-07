@@ -13,13 +13,13 @@
  */
 
 /** Identifies our hook, whatever path it was installed from. */
-export const HOOK_MARKER = 'copyworkcode-hook.js';
+const HOOK_MARKER = 'copyworkcode-hook.js';
 
 /** Tool names the capture hook runs for. */
 export const HOOK_MATCHER = 'Edit|Write|NotebookEdit';
 
 /** PreToolUse snapshots the pre-change baseline; PostToolUse records the event. */
-export const HOOK_EVENTS = ['PreToolUse', 'PostToolUse'] as const;
+const HOOK_EVENTS = ['PreToolUse', 'PostToolUse'] as const;
 
 export type Settings = Record<string, unknown>;
 

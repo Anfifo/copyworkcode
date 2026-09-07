@@ -41,7 +41,7 @@ const RESET_READONLY = 'workbench.action.files.resetActiveEditorReadonlyInSessio
 
 /** Left-hand side of the on-demand review diff: the review's baseline, named
  * after whatever the current mode compares against. */
-export function baselineUri(file: string, label: string): vscode.Uri {
+function baselineUri(file: string, label: string): vscode.Uri {
   return vscode.Uri.from({
     scheme: BASELINE_SCHEME,
     path: `/${path.basename(file)} (${label})`,

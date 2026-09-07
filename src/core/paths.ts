@@ -7,8 +7,8 @@ import * as path from 'path';
  */
 export const DATA_DIR = '.copyworkcode';
 export const EVENTS_FILE = 'events.jsonl';
-export const STATE_FILE = 'state.json';
-export const BASELINES_DIR = 'baselines';
+const STATE_FILE = 'state.json';
+const BASELINES_DIR = 'baselines';
 
 export function dataDir(root: string): string {
   return path.join(root, DATA_DIR);

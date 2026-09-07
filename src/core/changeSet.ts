@@ -83,7 +83,7 @@ export interface FileView {
 }
 
 /** Lines of surviving code kept either side of a changed region. */
-export const DEFAULT_CONTEXT = 3;
+const DEFAULT_CONTEXT = 3;
 
 /**
  * Build one file's document. `baseline` is what the review compares against,

@@ -4,7 +4,6 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import {
   Change,
-  HOOK_MARKER,
   Settings,
   addHook,
   hasHook,
@@ -38,15 +37,6 @@ function settingsFile(): string {
   return path.join(os.homedir(), '.claude', 'settings.json');
 }
 
-/** True when the capture hook is present in the user's settings. */
-export function isHookInstalled(): boolean {
-  try {
-    return fs.readFileSync(settingsFile(), 'utf8').includes(HOOK_MARKER);
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Bring the installed hook in line with `enabled`, and report what that took.
  *
@@ -55,10 +45,10 @@ export function isHookInstalled(): boolean {
  * opening anything. That is what keeps a fresh install from touching a file it
  * was never given permission to touch.
  */
-export async function syncCaptureHook(
+export function syncCaptureHook(
   context: vscode.ExtensionContext,
   enabled: boolean
-): Promise<CaptureSync> {
+): CaptureSync {
   const file = settingsFile();
   const present = fs.existsSync(file);
   if (!enabled && !present) return 'unchanged';

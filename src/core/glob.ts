@@ -3,7 +3,7 @@
  * segments), `*` (within a segment), and `?` (single character). Paths are
  * normalized to forward slashes before matching.
  */
-export function globToRegExp(glob: string): RegExp {
+function globToRegExp(glob: string): RegExp {
   let re = '';
   const g = glob.replace(/\\/g, '/');
   for (let i = 0; i < g.length; i++) {

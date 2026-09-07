@@ -174,9 +174,9 @@ function captureWanted(): boolean {
  * Silent when there was nothing to do — which is the default case, capture
  * being off — so activation never announces itself.
  */
-async function applyAgentCapture(context: vscode.ExtensionContext): Promise<void> {
+function applyAgentCapture(context: vscode.ExtensionContext): void {
   const wanted = captureWanted();
-  const result = await syncCaptureHook(context, wanted);
+  const result = syncCaptureHook(context, wanted);
   if (result === 'unchanged' || result === 'failed') return;
 
   const messages = {

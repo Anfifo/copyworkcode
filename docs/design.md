@@ -558,14 +558,14 @@ first — change size is what a reviewer picks by, so it leads the row: `+12 −
 review's coverage if one is live there. The file-icon theme keeps the icon, so a row still
 reads as the kind of file it is.
 
-**The row says two things, and the tooltip says the rest.** It used to carry the edit count and
-the directory as well, four facts deep in middle dots, in a panel usually docked narrow enough
-to elide the end of them. A description is read at a glance across a column of rows; a fact you
-go looking for belongs in the tooltip, which has the full relative path, the edit count and the
-line counts spelled out. The directory comes back to the row in the one case where the filename
-does not settle which file this is: two rows sharing a name, which is the same rule the
-workbench applies to its own editor tabs. A file at the workspace root prints no directory at
-all, rather than the `.` an earlier version showed, which read as a stray dot after the counts.
+**The row says two things, and the tooltip says the rest.** Four facts in middle dots, the edit
+count and the directory as well, overflow a panel usually docked narrow enough to elide the end
+of them. A description is read at a glance across a column of rows; a fact you go looking for
+belongs in the tooltip, which has the full relative path, the edit count and the line counts
+spelled out. The directory comes back to the row in the one case where the filename does not
+settle which file this is: two rows sharing a name, which is the same rule the workbench applies
+to its own editor tabs. A file at the workspace root prints no directory at all; a `.` there
+reads as a stray dot after the counts.
 
 **Colour in the panel means one thing: this file is being reviewed right now.** The row under
 review has its filename tinted (`list.warningForeground`, the workbench's own list yellow, so
@@ -827,20 +827,18 @@ Typing in a real buffer means the editor itself modifies text the user didn't ty
   inserts nothing. Pasting is available with editing enabled, where it is the editor's own
   paste and not a review gesture at all.
 - **A mismatch inserts nothing.** It flashes, and stays a mismatch however many times it is
-  repeated. This is what used to be tracked as a "strictness setting", and then as a
-  divergence budget; strictness is not a dial any more, because writing your own code is a
-  state you enter deliberately.
+  repeated. A strictness setting, and later a divergence budget, were both rejected:
+  strictness is not a dial, because writing your own code is a state you enter deliberately.
 - Sections that only *removed* lines are explicit stops: nothing to retype, so the lens strip
   reports how many lines were deleted there and offers a one-click confirm, recorded
   separately from typed, skipped and edited counts. **Enter confirms one**, the same key that
   acknowledges a deletion on the change set page. A printable key aimed at one is answered by
-  the review — "nothing to type here; Enter confirms" — rather than being handed to the editor,
-  where the session read-only flag used to answer it. That mattered most on the file that made
-  it visible: sections are walked in file order, so a file whose *first* change is a deletion
-  opens on a section with nothing to type, and the first keystroke of the review came back as
-  the workbench's "cannot edit in read-only editor" — a true statement about the buffer, from
-  the wrong voice, saying nothing about the one gesture the section wanted. A review answers
-  for its own sections.
+  the review — "nothing to type here; Enter confirms" — rather than by the editor's read-only
+  message. That matters most on a file whose *first* change is a deletion: sections are walked
+  in file order, so the review opens on a section with nothing to type, and the first keystroke
+  would otherwise meet the workbench's "cannot edit in read-only editor", a true statement about
+  the buffer that says nothing about the one gesture the section wants. A review answers for its
+  own sections.
 
 ## Review stats: personal only
 
