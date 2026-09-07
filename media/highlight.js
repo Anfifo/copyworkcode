@@ -20,7 +20,7 @@
  *
  * Colour is a reading aid, so a quote left unterminated stops at the end of its
  * own line rather than bleeding colour down the page. Only the delimiters that
- * genuinely are multi-line — template literals, triple quotes — carry over.
+ * are multi-line — template literals, triple quotes — carry over.
  */
 
 (function () {

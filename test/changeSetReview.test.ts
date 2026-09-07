@@ -109,7 +109,7 @@ test('a key the region does not owe changes nothing and takes no file over', () 
     text: 'z',
   });
 
-  // The resolution has nowhere to say it took anything over, which is the point:
+  // The resolution has nowhere to say it took anything over:
   // a wrong key must not be what ends a review running in an editor.
   assert.deepEqual(resolution, {
     kind: 'reject',
@@ -218,8 +218,8 @@ test('the last region claimed finishes the file, with what the page read', () =>
   });
   assert.equal(commit.finished.outcome, 'typed');
   assert.equal(commit.finished.summary, '1 typed, 0 skipped');
-  // The baseline advances to what was actually read, not to whatever is on disk
-  // by now — anything that landed since comes back as debt, which is the truth.
+  // The baseline advances to what was read, not to whatever is on disk by now;
+  // anything that landed since comes back as debt.
   assert.equal(commit.finished.content, live.current);
   assert.deepEqual(commit.posts[commit.posts.length - 1], {
     type: 'done',
@@ -436,7 +436,7 @@ test('a file finished on the page stops reporting progress', () => {
 
   // Its baseline moved when it closed, so the row left the queue. Debt standing
   // against the file again is a new change this page has not read, and "9/9" is
-  // the one answer that would be a lie about it.
+  // the one answer that would misreport it.
   assert.equal(review.progressFor('/w/a.ts'), undefined);
 });
 

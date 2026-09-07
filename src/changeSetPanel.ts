@@ -281,11 +281,12 @@ export class ChangeSetPanel implements vscode.Disposable {
    * with the editor already in the reviewer's hands.
    *
    * This is the page's answer to a reviewer writing their own code, and it is
-   * an answer by delegation on purpose. The page applies no edit anywhere — that is what lets
-   * it be a page at all — so a rewrite here would need a write path, a text box
-   * with none of the editor's conveniences, and a story about what a changed
-   * region does to the snapshot the rest of the document is drawn from. The
-   * editor already has all three, and is where anyone would rather write code.
+   * an answer by delegation on purpose. The page applies no edit anywhere —
+   * that is what lets it be a page at all — so a rewrite here would need a
+   * write path, a text box with none of the editor's conveniences, and a story
+   * about what a changed region does to the snapshot the rest of the document
+   * is drawn from. The editor already has all three, and is where anyone would
+   * rather write code.
    *
    * What crosses with the file is the progress: the regions the reviewer
    * already typed out here stay claimed there. The queue row changes hands with
@@ -321,7 +322,7 @@ export class ChangeSetPanel implements vscode.Disposable {
   /**
    * Every region of this file is accounted for. The baseline advances to the
    * content the page reviewed — not to whatever is on disk now, which may have
-   * moved since the page opened. Advancing to what was actually read is what
+   * moved since the page opened. Advancing to what was read is what
    * keeps the difference between the two from being quietly signed off: it
    * comes back as debt on the next pass, which is the truth.
    */

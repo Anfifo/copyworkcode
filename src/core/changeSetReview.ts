@@ -7,7 +7,7 @@
  * owe changes nothing and takes no file over, a gesture aimed at progress the
  * page no longer holds is dropped, the last region claimed finishes the file —
  * and none of them need a webview or a file system to be true. The panel keeps
- * what genuinely needs the editor: the page itself, reading files, moving
+ * what needs the editor: the page itself, reading files, moving
  * baselines, writing the review log.
  *
  * A gesture is worked out in two steps, because the middle of it has to await.
@@ -87,8 +87,7 @@ export type Outbound =
 
 /**
  * What a gesture comes to, before any of it has happened. Only `apply` can take
- * a file over, which is the rule about wrong keys expressed as a type: a
- * rejected keystroke has no way to say it changed anything.
+ * a file over: a rejected keystroke has no way to say it changed anything.
  */
 export type Resolution =
   | { kind: 'ignore' }
@@ -110,8 +109,8 @@ export type Resolution =
 /** A file every region of which is now accounted for. */
 export interface FinishedFile {
   file: string;
-  /** What the page actually reviewed — what a baseline advance moves to, rather
-   * than whatever is on disk by now. */
+  /** What the page reviewed: what a baseline advance moves to, rather than
+   * whatever is on disk by now. */
   content: string;
   counts: Record<SectionOutcome, number>;
   /** The file-level outcome for the review log. */
@@ -253,8 +252,8 @@ export class ChangeSetReview {
     switch (gesture.type) {
       case 'type':
         if (engine.handleInput(String(gesture.text ?? '')).kind === 'reject') {
-          // Nothing lands in the file on a wrong key here — the page has no
-          // file to land it in — so saying so is the whole answer.
+          // Nothing lands in the file on a wrong key here: the page has no file
+          // to land it in, so a rejection is all there is to report.
           return { kind: 'reject', posts: [{ type: 'reject', ...spot }] };
         }
         touched = true;
@@ -358,9 +357,8 @@ export class ChangeSetReview {
    * Give this file to an editor review, carrying what the page covered: every
    * region's position and outcome, and the region the reviewer asked from.
    *
-   * The page stops being this file's surface, which is the point — the editor is
-   * where a reviewer writes their own code, and one surface owns a file at a
-   * time.
+   * The page stops being this file's surface: the editor is where a reviewer
+   * writes their own code, and one surface owns a file at a time.
    * What is different from every other way of losing a file is that nothing is
    * given up: the seed is the page's progress, and the review that receives it
    * starts where the reviewer stopped rather than at zero.

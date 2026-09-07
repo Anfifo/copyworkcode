@@ -5,7 +5,7 @@ import * as path from 'path';
  * Hide a path from git using `.git/info/exclude` — the repo-local ignore list
  * that is never committed and never shows as a change. The alternative would be
  * the project's own `.gitignore`, which is shared with everyone working on the
- * repository: one person enabling a review tool has no business editing a
+ * repository: one person enabling a review tool should not be editing a
  * tracked file for the whole team. This is the narrower option — a single line
  * in a file git treats as local configuration, which goes inert the moment the
  * data directory is gone.

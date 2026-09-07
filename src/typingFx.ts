@@ -36,8 +36,8 @@ const CHARS_PER_SEGMENT = 4;
 const MAX_SEGMENTS = 8;
 
 /** Ceiling on ranges animating at once. Typing faster than a ladder decays
- * leaves a trail of recent strikes behind the cursor, which is the point —
- * but the trail is bounded so a burst cannot grow the per-tick repaint. */
+ * leaves a trail of recent strikes behind the cursor, as intended, but the
+ * trail is bounded so a burst cannot grow the per-tick repaint. */
 const MAX_IN_FLIGHT = 24;
 
 /**
@@ -49,7 +49,7 @@ class Ladder implements vscode.Disposable {
   private entries: { range: vscode.Range; frame: number }[] = [];
   private timer?: ReturnType<typeof setInterval>;
   /** Which frames currently have ranges painted, so a tick only touches the
-   * frames that actually changed instead of all of them. */
+   * frames that changed instead of all of them. */
   private painted: boolean[];
 
   constructor(

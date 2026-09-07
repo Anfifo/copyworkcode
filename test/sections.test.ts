@@ -336,7 +336,7 @@ test('a change spanning a section boundary leaves the two disjoint', () => {
   sections[0].position = 2;
 
   // Select from inside the first section into the second and type over both.
-  // One owner per character is the rule: the earlier section keeps the
+  // Each character has one owner: the earlier section keeps the
   // replacement, the later one keeps whatever of its own text survived.
   const after = remap(sections, before, [
     replace(sections[0].start + 1, sections[1].start + 2, 'MERGED'),
@@ -450,8 +450,8 @@ test('outcomeCounts tallies every kind of claim', () => {
 });
 
 test('the invariant survives a long run of arbitrary edits', () => {
-  // Deterministic pseudo-random edits: the point is that no sequence of buffer
-  // changes can leave a section pointing at text it does not describe, which is
+  // Deterministic pseudo-random edits: no sequence of buffer
+  // changes may leave a section pointing at text it does not describe, which is
   // what every decoration and every keystroke check depends on.
   let seed = 12345;
   const rand = (n: number) => {

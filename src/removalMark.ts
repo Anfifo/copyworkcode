@@ -93,7 +93,7 @@ export function removalHover(
   if (!anchor) return undefined;
   const md = new vscode.MarkdownString();
   // A command link is inert unless the message says which commands it trusts,
-  // and the one it needs is the only one it gets.
+  // so it is granted exactly the one it needs.
   md.isTrusted = { enabledCommands: [showAll.path] };
   md.appendMarkdown(`**${deletedLines(removal.text.length)}**\n\n`);
   md.appendCodeblock(
@@ -217,8 +217,8 @@ export function removalRanges(
 }
 
 /** What the gutter icon reads. Past two digits the exact number stops being
- * legible at gutter size and stops mattering — "a lot went here" is the whole
- * message, and the lens above the line still gives the count in words. */
+ * legible at gutter size, and the badge only has to say that a lot went; the
+ * lens above the line still gives the count in words. */
 export function badgeLabel(lines: number): string {
   return `−${lines > 99 ? '99+' : lines}`;
 }

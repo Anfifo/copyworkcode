@@ -308,7 +308,7 @@ function autoSkip(root: string, events: ChangeEvent[]): void {
     if (done.has(event.file) || !matchesAny(event.file, globs)) continue;
     done.add(event.file);
     // Capture-driven, so it always works off the tracked snapshot: what the
-    // view happens to be comparing against right now is beside the point.
+    // view happens to be comparing against right now does not enter into it.
     skipWithoutTyping(root, event.file, 'auto-skipped', readBaseline(root, event.file));
   }
 }

@@ -55,8 +55,7 @@ function baselineUri(file: string, label: string): vscode.Uri {
  * Removed text has nowhere in the buffer to live, so showing more than a hover
  * holds means giving it a file: a virtual one, keyed by the section that lost
  * the lines, opened in a panel over the line where they used to be. The name
- * keeps the original extension, which is the only thing a peek has to go on
- * when it decides how to colour what it shows.
+ * keeps the original extension, which the peek uses to pick a colouring.
  */
 export function removedUri(
   file: string,
@@ -157,7 +156,7 @@ export interface ReviewProgress {
  * *parked*: its sections, their positions and its record of the version under
  * review are all kept, and reviewing that file again picks up exactly where it
  * stopped. Only one review is live at a time, which is what an editor can
- * actually support — the read-only flag, the `type` override and the overlay all
+ * support — the read-only flag, the `type` override and the overlay all
  * belong to one document — so a parked review is not a second live one. Nothing
  * of it is on screen, nothing is locked, and the file is an ordinary editor
  * again. Buffer changes still reach it, though, so a formatter or an agent
@@ -212,7 +211,7 @@ export class RetypeController implements vscode.Disposable {
   readonly onDidStart = this.startEmitter.event;
 
   /** Text still owed: kept in the buffer, rendered dimmed until typed over.
-   * Dim enough to read as still owed, light enough to actually read — the
+   * Dim enough to read as still owed, light enough to read — the
    * next character has to be legible, because guidance insists on exactly it. */
   private pending = vscode.window.createTextEditorDecorationType({
     opacity: '0.55',
@@ -285,7 +284,7 @@ export class RetypeController implements vscode.Disposable {
    * re-issue a setContext per key on every event. */
   private contexts = new Map<string, boolean>();
   /** Signature of what the lens strip last rendered, so it is only asked to
-   * re-provide when something in it actually changed. */
+   * re-provide when something in it changed. */
   private lensKey = '';
   /** The same, for the decorations. */
   private paintKey = '';
@@ -607,10 +606,10 @@ export class RetypeController implements vscode.Disposable {
     if (startEditing() || handover) {
       // Two ways to open with the editor already handed over: the opt-in
       // setting, for someone who mostly rewrites what the agent wrote, and a
-      // handover from the change set page, where asking for it is the whole
-      // gesture. The override was just taken and is dropped again here: the
-      // probe above is the only way to find out whether guidance *could* run,
-      // and the answer matters even when it isn't running yet.
+      // handover from the change set page, which always asks for it. The
+      // override was just taken and is dropped again here: the probe above is
+      // how the review finds out whether guidance *could* run, and the answer
+      // matters even when it isn't running yet.
       this.session.editing = true;
       this.syncTypeOverride();
     } else {
@@ -677,7 +676,7 @@ export class RetypeController implements vscode.Disposable {
    *
    * Every gesture here reads a section's position, awaits, then writes it back,
    * so two of them overlapping would decide from the same position and the
-   * second would act on a stale offset. Whether the editor can actually deliver
+   * second would act on a stale offset. Whether the editor can deliver
    * a keystroke while the previous one is still being answered is not something
    * this code should depend on either way: commands driven from the extension
    * arrive sequentially, so the test suite cannot demonstrate the overlap, and
@@ -716,7 +715,7 @@ export class RetypeController implements vscode.Disposable {
       // the editor, that keystroke came back as "cannot edit in read-only
       // editor": the workbench's voice, answering a question about the review
       // with a fact about the buffer, and saying nothing about the one gesture
-      // the section actually wants. The review answers for its own sections.
+      // the section wants. The review answers for its own sections.
       if (this.session && !this.session.editing && focus?.section.kind === 'confirm') {
         this.updateUi(
           `nothing to type here — ${lineCount(focus.section.removedLines.length)} ` +
@@ -1116,9 +1115,8 @@ export class RetypeController implements vscode.Disposable {
   }
 
   /** The whole removal, in a panel over the line it happened at — where the
-   * hover stops. Opened as a peek rather than an editor because the point is
-   * to read the lines against the code that replaced them, without leaving
-   * it. */
+   * hover stops. Opened as a peek rather than an editor so the lines can be
+   * read against the code that replaced them, without leaving it. */
   async peekRemoved(start: number): Promise<void> {
     const s = this.session;
     if (!s) return;
@@ -1298,8 +1296,8 @@ export class RetypeController implements vscode.Disposable {
   // --- ending -----------------------------------------------------------------
 
   /**
-   * Stop reviewing without recording an outcome. Unlike the read-only era there
-   * is nothing to restore: whatever the reviewer typed or rewrote is already in
+   * Stop reviewing without recording an outcome. There is nothing to restore:
+   * whatever the reviewer typed or rewrote is already in
    * the file, and the file's debt is recomputed from its content the next time
    * the queue is read.
    */
@@ -1787,8 +1785,8 @@ export class RetypeController implements vscode.Disposable {
           `Typed ${section.position}/${section.target.length} · ${where}${replaces}`,
           ''
         ),
-        // First of the actions: disagreeing with the code is the point of a
-        // review, and the fills are conveniences that don't need advertising.
+        // First of the actions: disagreeing with the code is what a review is
+        // for, and the fills are conveniences that don't need advertising.
         editLens,
         lens(
           'Skip section',

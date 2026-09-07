@@ -92,7 +92,7 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
       const where = progress.state === 'page' ? 'on the page' : progress.state;
       bits.push(`${where} ${progress.claimed}/${progress.total}`);
     }
-    // The folder earns its place only when the filename does not settle which
+    // The folder is shown only when the filename does not settle which
     // file this is — the same rule the workbench applies to its editor tabs.
     const dir = this.ambiguous.has(path.basename(file))
       ? relativeDir(this.root, file)
@@ -178,17 +178,9 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
  * nothing else. A review the reviewer stepped away from is not that file, and
  * neither is one the change set page holds: both say how far they got in words,
  * and the one hue the panel has stays on the question of where the reviewer
- * actually is. The page is not somewhere the queue can point them anyway — it is
- * already open in front of them, showing its own progress on every file at once.
- *
- * An earlier version coloured every queued row by the shape of its change —
- * green for additions, red for deletions, blue for both — which put the panel's
- * one colour on the least useful axis. All three said exactly the same thing
- * about review state ("not reviewed"), they differed only on information the
- * row already prints as `+N −M` right beside the name, and green in particular
- * read as *done* when it meant the opposite. Colour now carries review state
- * instead: one hue, one meaning, and the only state a row can be in that is
- * worth pointing at, since a finished file leaves the queue on its own.
+ * is. The page is not somewhere the queue can point them anyway — it is already
+ * open in front of them, showing its own progress on every file at once. There
+ * is no "reviewed" colour either: a finished file leaves the queue on its own.
  *
  * A tree row cannot colour part of its own text, so the counts stay in the
  * row's uncoloured description — a native tree view has no way to tint them,

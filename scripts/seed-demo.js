@@ -179,7 +179,7 @@ seed(
 // replacement, whose removed line hides behind the added one — and a run
 // deleted off the end of the file, which has no following line to mark. The
 // last line is deliberately not a closing brace: a deleted trailing function
-// leaves its `}` behind as common context, so a removal genuinely lands at the
+// leaves its `}` behind as common context, so a removal lands at the
 // end of a file only when the file ends with something else.
 seed(
   'trimmed.ts',

@@ -12,7 +12,7 @@
  * The rule is content-only. An edit to a matching file is still recorded as an
  * occurrence, so the fact that an agent touched it is never hidden — only the
  * text is withheld. A file with no baseline has no review debt, so these are
- * not offered for retyping either; typing a secret back in was never the point.
+ * not offered for retyping either.
  *
  * Not configurable, and biased toward withholding: a false positive costs one
  * file being un-reviewable, a false negative writes somebody's private key to

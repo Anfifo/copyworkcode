@@ -267,7 +267,7 @@ export function loadPage(): Page {
   };
 
   // The page is a script, not a module: run it with the globals a webview gives
-  // it. Running the shipped file is the whole point — a copy of its logic here
+  // it. The shipped file has to be the one that runs; a copy of its logic here
   // would be a test of the copy. The highlighter goes first and hangs itself off
   // `window`, which is how the page finds it in a browser too.
   const run = (source: string) =>
