@@ -2,6 +2,12 @@
 
 Review AI-generated code changes by typing them yourself.
 
+[![Visual Studio Marketplace](https://img.shields.io/visual-studio-marketplace/v/Anfifo.copyworkcode?label=Marketplace)](https://marketplace.visualstudio.com/items?itemName=Anfifo.copyworkcode)
+[![Open VSX](https://img.shields.io/open-vsx/v/Anfifo/copyworkcode?label=Open%20VSX)](https://open-vsx.org/extension/Anfifo/copyworkcode)
+
+Install from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=Anfifo.copyworkcode), or from [Open VSX](https://open-vsx.org/extension/Anfifo/copyworkcode) for editors that
+use that registry.
+
 When an AI assistant edits your code, the change doesn't just land silently. CopyWorkCode
 presents it and asks you to write it out, change by change. While you type, the file follows
 the code to the letter — a wrong key changes nothing — and if you disagree with what the AI
