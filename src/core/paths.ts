@@ -1,9 +1,9 @@
 import * as path from 'path';
 
 /**
- * Layout of the per-workspace runtime data directory. Shared between the
- * extension and (by convention, re-implemented in plain JS) the capture hook —
- * the two must agree on every name here.
+ * Layout of the per-workspace runtime data directory. The capture hook
+ * requires this module's compiled output, so the extension and the hook read
+ * every name here from one place.
  */
 export const DATA_DIR = '.copyworkcode';
 export const EVENTS_FILE = 'events.jsonl';

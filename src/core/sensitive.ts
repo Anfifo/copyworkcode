@@ -21,8 +21,8 @@
  * while `src/secrets.ts` is code that reads them and is exactly the kind of file
  * worth reviewing.
  *
- * `hook/copyworkcode-hook.js` re-implements these patterns in plain JS because
- * it runs as a standalone script — the two lists must stay in sync.
+ * The capture hook applies the same rule by requiring this module's compiled
+ * output, so the list exists once.
  */
 
 /** Key material and credential stores, whatever they sit next to. */

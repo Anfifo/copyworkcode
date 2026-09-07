@@ -11,8 +11,8 @@ import { hasDebt } from './diff';
  *
  * The initial snapshot for a file is written by the capture hook *before* the
  * agent's first edit (PreToolUse), so the pre-change content is preserved even
- * when the editor is closed. The hook re-implements the naming convention
- * below in plain JS — keep the two in sync.
+ * when the editor is closed. The hook requires this module's compiled output,
+ * so there is one implementation of the naming below.
  *
  * Naming: workspace-relative path, forward slashes, percent-encoded into a
  * single flat file name. A file without a baseline has no review debt.
@@ -51,6 +51,24 @@ export function advanceBaseline(
   if (!p) return;
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, content);
+}
+
+/**
+ * Record the content a file had before its first captured edit, unless a
+ * baseline already exists: an existing one is the last-reviewed state, and
+ * replacing it would erase unreviewed debt. Returns false when nothing was
+ * written, for either reason.
+ */
+export function seedBaseline(root: string, file: string, content: string): boolean {
+  const p = baselinePath(root, file);
+  if (!p) return false;
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  try {
+    fs.writeFileSync(p, content, { flag: 'wx' });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** All workspace files that currently have a baseline snapshot. */

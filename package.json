@@ -500,7 +500,7 @@
     "package": "vsce package",
     "publish": "vsce publish",
     "demo:seed": "node scripts/seed-demo.js",
-    "pretest": "tsc -p tsconfig.test.json",
+    "pretest": "tsc -p ./ && tsc -p tsconfig.test.json",
     "test": "node --test \"out-test/test/*.test.js\"",
     "test:integration": "tsc -p ./ && tsc -p tsconfig.test.json && node out-test/test-integration/runTest.js"
   },
