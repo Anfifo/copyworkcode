@@ -32,27 +32,27 @@ exists, changes that no hook saw are reached through the git comparison mode ins
 Tools that expose lifecycle hooks (Claude Code first) get a small hook script registered
 for two moments around every file edit/write the agent performs:
 
-- **Before the tool runs**, the hook snapshots the file's current content into
-  `.copyworkcode/baselines/` — but only if no baseline exists yet. This preserves the
-  pre-change state the review diff needs, even when the editor is closed, and never
-  overwrites a baseline (that would erase unreviewed debt).
-- **After the tool runs**, the hook appends a JSON change event to
-  `.copyworkcode/events.jsonl`.
+- **Before the tool runs**, the hook snapshots the file's current content into the
+  workspace's `baselines/` folder under the data home — but only if no baseline exists
+  yet. This preserves the pre-change state the review diff needs, even when the editor is
+  closed, and never overwrites a baseline (that would erase unreviewed debt).
+- **After the tool runs**, the hook appends a JSON change event to the workspace's
+  `events.jsonl` there.
 
 Key properties:
 
 - **Works regardless of where the agent runs.** The hook runs inside the agent's process
-  — external terminal, integrated terminal, another window. Events land in the workspace
-  folder; the extension picks them up live via a file watcher, or catches up on next
-  activation if the editor was closed during the session.
+  — external terminal, integrated terminal, another window. Events land in the workspace's
+  data folder under the user's home; the extension picks them up live via a file watcher,
+  or catches up on next activation if the editor was closed during the session.
 - **Intent is recoverable.** The hook records the session transcript path and tool-use id,
   so the extension can later extract the assistant's stated reasoning for that specific
   change and show it during review. Only the pointer is stored; the transcript remains the
   agent's own file, read on demand if a review asks for it.
 - **Credentials are never copied.** Capture duplicates content by design — a baseline holds
   the pre-change version of a file and the event log holds the text of each edit — so a
-  credentials file would end up written down twice over, inside a directory the workspace
-  deliberately hides from `git status`. Files matching the exclusion list get neither: no
+  credentials file would end up written down twice over, inside a folder in the user's
+  home that nobody browses. Files matching the exclusion list get neither: no
   baseline snapshot, no content in the event, and therefore no review debt, since a file
   with no baseline has none. The occurrence is still recorded, so an agent touching one is
   never invisible; only the text is withheld. The list is deliberately broad, because a
@@ -82,7 +82,14 @@ Key properties:
   entry is preserved) and the write goes to a temporary file renamed over the target, which
   is atomic within a directory. A failed write leaves the original intact.
 - **It records only where invited.** The hook script no-ops in workspaces that haven't
-  enabled the extension, so one user-wide entry never means recording everywhere.
+  enabled the extension, so one user-wide entry never means recording everywhere. It finds
+  the workspace by walking up from the agent's working directory to the nearest registered
+  folder, so a session started in a subfolder still lands in the right store.
+- **One implementation of the shared rules.** The hook ships next to the extension's
+  compiled core and requires it for where the data lives, how baselines are named and which
+  files are sensitive. Earlier versions carried copies of those in the script, each marked
+  "keep in sync"; a hash in the path layout was the point at which a third copy would have
+  been one too many.
 
 ## Unit of review: net diff vs. baseline
 
@@ -99,9 +106,10 @@ regions. Completing a review advances the baseline to the current content.
 
 Mechanics of the store:
 
-- One snapshot file per source file under `.copyworkcode/baselines/`, named by the
-  percent-encoded workspace-relative path (forward slashes). Flat, greppable, no index to
-  corrupt. The hook re-implements this naming in plain JS; the two must stay in sync.
+- One snapshot file per source file in the workspace's `baselines/` folder (see "Where the
+  data lives"), named by the percent-encoded workspace-relative path (forward slashes).
+  Flat, greppable, no index to corrupt. The hook requires the compiled module that defines
+  this naming, so it exists once.
 - The *initial* baseline for a file is written by the capture hook just before the
   agent's first edit (see "Agent hook integration"). A brand-new file gets an empty
   baseline, so its whole content is debt. Files without a baseline have no debt — the
@@ -122,6 +130,36 @@ Consequences:
   "editing" them); v1 may accept weirdness there, but it's a known hole.
   The git comparison mode below is not that fix, though it is a way out when snapshots
   have gone wrong: it ignores them entirely.
+
+### Where the data lives
+
+Everything the extension keeps — baselines, the event log, the review log — lives under
+`~/.copyworkcode/workspaces/<key>/`, one folder per workspace, and nowhere inside the
+workspace itself. `COPYWORKCODE_HOME` relocates the whole tree; the tests use it to keep
+their data apart from the real one.
+
+- **Out of the project, out of its git.** An earlier version kept the data in a
+  `.copyworkcode/` folder at the workspace root and hid it by appending a line to
+  `.git/info/exclude`. That put snapshots of the user's files next to those files and made
+  the extension write into a repository it doesn't own, however local the file. Neither is
+  necessary, so the extension now writes nothing into the project and nothing into `.git`;
+  git is used read-only, for the comparison mode.
+- **The user's home rather than the editor's storage.** Extensions normally keep files in
+  the per-extension folder the editor hands them. That folder is not an option here: the
+  capture hook is a bare Node process with no editor API, and the editor may not even be
+  running when it fires. The home folder is also shared across editors, so two of them on
+  the same machine see the same review state, where per-editor storage would split it.
+- **Keyed by path, labelled by path.** The folder name is a hash of the workspace's
+  canonical path — resolved, real, trailing separator stripped, forward slashes,
+  case-folded where the filesystem is — so that every spelling of one folder, from the
+  editor or from an agent's `cwd`, lands on one store. `workspace.json` inside carries the
+  path in clear, so the folders can be read by a person. A workspace that moves gets a
+  fresh store; the manifest is what would let a later version offer to adopt the old one.
+- **Registered means enabled.** Enabling a workspace creates its folder and manifest;
+  that folder's existence is the whole of "enabled", for the extension and the hook alike.
+  Deleting review data for a workspace, from the palette and behind a confirmation, removes
+  the folder and stops tracking. It is the one destructive command, and the only cleanup
+  that exists: nothing prunes the event log or the review log on its own yet.
 
 ### Comparing against git instead
 
@@ -919,7 +957,6 @@ tamper-evidence machinery, and keeps the extension out of surveillance territory
   a small workspace with pre-made baselines and pending debt, one file per interesting
   review case, so the review flow can be tried by hand without an agent session. The
   "Run Extension (Demo)" launch configuration seeds and opens it in one go.
-- `.copyworkcode/` — per-workspace runtime data (event queue, baselines, review state).
-  Never committed: enabling a workspace adds it to the repo-local exclude list
-  (`.git/info/exclude`), which hides it from `git status` without editing the project's
-  own `.gitignore` — a tracked file that belongs to everyone working on the repository.
+- Runtime data (event queue, baselines, review state) is not in the repository at all: it
+  lives under `~/.copyworkcode/`, one folder per workspace — see "Where the data lives".
+  `src/core/dataHome.ts` owns that layout, and both the extension and the hook go through it.

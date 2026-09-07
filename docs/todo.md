@@ -6,17 +6,6 @@ promoted here when they're deemed worth building.
 
 ## Next up
 
-- [ ] **Move the runtime data out of the workspace.** `.copyworkcode/` inside the project
-      needs a line in `.git/info/exclude` to stay invisible, which is a write into the
-      user's repository, and it puts snapshots of their files next to those files. Move
-      the store to `~/.copyworkcode/workspaces/<key>/` (`COPYWORKCODE_HOME` relocates it),
-      keyed by a hash of the normalised workspace path, with a `workspace.json` naming the
-      path in clear. The hook finds the store from its working directory the same way,
-      walking up to the nearest registered root, so a session started in a subfolder is
-      captured too. Nothing is written into `.git` any more. First fold the hook's
-      mirrored copies of the path layout and the exclusion list into requires of the
-      compiled core modules, so the new hashing exists once. Add a command that forgets a
-      workspace by deleting its folder.
 - [ ] **Dogfood the core loop on real work.** The retype flow is built and tested; whether
       retyping feels like review or like punishment is only testable by living with it.
       Expect matching-rule and pacing tweaks. Questions to answer by use:

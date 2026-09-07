@@ -4,6 +4,22 @@ Notable changes to CopyWorkCode. Versions follow [semantic versioning](https://s
 
 ## [Unreleased]
 
+## [0.0.3]
+
+### Storage
+
+- **Review data has left the workspace.** Baselines, captured events and the review log now
+  live under `~/.copyworkcode`, one folder per workspace, keyed by a hash of the workspace
+  path and labelled with the path in clear. Nothing is written into the project or into its
+  `.git` directory any more; the repo-local exclude entry earlier versions added is no longer
+  needed and is no longer written. `COPYWORKCODE_HOME` relocates the whole tree.
+- **Capture follows the agent into subfolders.** A session started below the workspace root
+  records into that workspace's store.
+- **Delete Review Data for this Workspace** removes everything kept for the open workspace,
+  behind a confirmation.
+- The capture hook reads the data layout and the sensitive-file rules from the extension's
+  compiled core instead of carrying its own copies.
+
 ## [0.0.2]
 
 ### Review

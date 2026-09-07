@@ -14,7 +14,9 @@ the code to the letter — a wrong key changes nothing — and if you disagree w
 wrote, one keystroke hands you the editor to write your own version instead. Skip any change
 with a click, and set rules to auto-skip files you don't care to review.
 
-Everything runs locally: no account, no network calls, no data leaving the machine.
+Everything runs locally: no account, no network calls, no data leaving the machine. What the
+extension keeps — the snapshots it reviews against and its review log — lives under
+`~/.copyworkcode` in your home folder, never inside your project.
 
 ## Why
 
@@ -42,9 +44,9 @@ Capture is off until you turn it on. **CopyWorkCode: Turn On Agent Capture** rec
 made by Claude Code through its hooks — a snapshot of each file taken before the edit, plus a
 log of what changed.
 
-It works by adding **one entry to `~/.claude/settings.json`**. That file is the only thing
-outside your workspace the extension will ever touch, it is only touched if you turn capture
-on, and **CopyWorkCode: Turn Off Agent Capture** puts it back as it was.
+It works by adding **one entry to `~/.claude/settings.json`**. That is the only file the
+extension edits that it does not own, it is only touched if you turn capture on, and
+**CopyWorkCode: Turn Off Agent Capture** puts it back as it was.
 
 Files whose contents should not be copied — credentials, keys, environment files — are
 refused before they reach any review surface.

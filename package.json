@@ -2,7 +2,7 @@
   "name": "copyworkcode",
   "displayName": "CopyWorkCode",
   "description": "Review AI-generated code changes by typing them yourself.",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "Anfifo",
   "license": "MIT",
   "repository": {
@@ -503,13 +503,14 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "clean": "node -e \"for (const d of ['out','out-test']) require('fs').rmSync(d, { recursive: true, force: true })\"",
+    "vscode:prepublish": "npm run clean && npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "package": "vsce package",
     "publish": "vsce publish",
     "demo:seed": "node scripts/seed-demo.js",
-    "pretest": "tsc -p ./ && tsc -p tsconfig.test.json",
+    "pretest": "npm run clean && tsc -p ./ && tsc -p tsconfig.test.json",
     "test": "node --test \"out-test/test/*.test.js\"",
     "test:integration": "tsc -p ./ && tsc -p tsconfig.test.json && node out-test/test-integration/runTest.js"
   },
