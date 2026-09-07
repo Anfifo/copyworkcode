@@ -2,7 +2,7 @@
 
 Review AI-generated code changes by typing them yourself.
 
-[![Visual Studio Marketplace](https://img.shields.io/visual-studio-marketplace/v/Anfifo.copyworkcode?label=Marketplace)](https://marketplace.visualstudio.com/items?itemName=Anfifo.copyworkcode)
+[![Visual Studio Marketplace](https://vsmarketplacebadges.dev/version/Anfifo.copyworkcode.svg?label=Marketplace)](https://marketplace.visualstudio.com/items?itemName=Anfifo.copyworkcode)
 [![Open VSX](https://img.shields.io/open-vsx/v/Anfifo/copyworkcode?label=Open%20VSX)](https://open-vsx.org/extension/Anfifo/copyworkcode)
 
 Install from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=Anfifo.copyworkcode), or from [Open VSX](https://open-vsx.org/extension/Anfifo/copyworkcode) for editors that
