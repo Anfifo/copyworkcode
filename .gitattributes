@@ -5,3 +5,5 @@
 *.png binary
 *.ico binary
 *.vsix binary
+*.gif binary
+*.mp4 binary

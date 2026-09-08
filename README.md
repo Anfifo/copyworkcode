@@ -2,6 +2,8 @@
 
 Review AI-generated code changes by typing them yourself.
 
+![A change being typed into place](https://raw.githubusercontent.com/Anfifo/copyworkcode/main/docs/media/typing.gif)
+
 [![Visual Studio Marketplace](https://vsmarketplacebadges.dev/version/Anfifo.copyworkcode.svg?label=Marketplace)](https://marketplace.visualstudio.com/items?itemName=Anfifo.copyworkcode)
 [![Open VSX](https://img.shields.io/open-vsx/v/Anfifo/copyworkcode?label=Open%20VSX)](https://open-vsx.org/extension/Anfifo/copyworkcode)
 
