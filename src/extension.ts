@@ -5,7 +5,7 @@ import { ChangeEvent } from './types';
 import { EventQueue } from './eventQueue';
 import { ReviewLog } from './reviewState';
 import { ChangeSetPanel } from './changeSetPanel';
-import { DebtMode, DebtSource, forgetDebtMode } from './debtSource';
+import { DebtMode, DebtSource, forgetDebtChoices } from './debtSource';
 import { DebtDecorations, DebtTreeProvider, RowProgress } from './debtView';
 import { RetypeController, BASELINE_SCHEME, REMOVED_SCHEME } from './retypeController';
 import { HookReport, inspectCaptureHook, syncCaptureHook } from './hookInstaller';
@@ -96,6 +96,9 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     vscode.commands.registerCommand('copyworkcode.useTrackedBaseline', () =>
       setDebtMode('tracked')
+    ),
+    vscode.commands.registerCommand('copyworkcode.pickGitRevision', () =>
+      pickGitRevision()
     ),
     vscode.commands.registerCommand('copyworkcode.openSettings', () =>
       vscode.commands.executeCommand('workbench.action.openSettings', 'copyworkcode')
@@ -216,6 +219,61 @@ async function setDebtMode(mode: DebtMode): Promise<void> {
   await source.setMode(mode);
 }
 
+const COMMITS_OFFERED = 40;
+
+/**
+ * Choose the revision git mode compares against: one of the recent commits, a
+ * revision typed by hand, or the setting again. Picking one enters git mode,
+ * since a commit is only ever picked to be compared against.
+ */
+async function pickGitRevision(): Promise<void> {
+  if (!source) return;
+  const commits = source.recentCommits(COMMITS_OFFERED);
+  if (!commits) {
+    void vscode.window.showWarningMessage(
+      'CopyWorkCode: cannot list commits here — no git repository, or no commits yet.'
+    );
+    return;
+  }
+  const TYPE = 'Type a revision…';
+  const BACK = `Back to ${source.configuredRef}`;
+  const items: vscode.QuickPickItem[] = commits.map((c) => ({
+    label: c.short,
+    description: c.subject,
+    detail: c.when,
+  }));
+  if (source.pickedRef !== undefined) {
+    items.unshift({ label: BACK, description: 'the revision from settings' });
+  }
+  items.push({ label: TYPE, description: 'a tag, a branch, or any revision git understands' });
+
+  const pick = await vscode.window.showQuickPick(items, {
+    title: 'Compare against a commit',
+    placeHolder: `Comparing against ${source.ref}. Pick the revision the working tree is compared to.`,
+    matchOnDescription: true,
+  });
+  if (!pick) return;
+
+  let ref: string | undefined = pick.label;
+  if (pick.label === BACK) ref = undefined;
+  if (pick.label === TYPE) {
+    ref = await vscode.window.showInputBox({
+      prompt: 'Revision to compare against',
+      placeHolder: 'v1.2.0, main, HEAD~3, or a commit hash',
+      validateInput: (value) =>
+        value.trim().length === 0
+          ? 'Enter a revision.'
+          : source?.revisionExists(value.trim())
+            ? undefined
+            : `git cannot resolve ${value.trim()} here.`,
+    });
+    if (ref === undefined) return;
+    ref = ref.trim();
+  }
+  await source.setRef(ref);
+  await setDebtMode('git');
+}
+
 /**
  * What the queue row says about a file, from whichever surface holds it. The
  * editor review answers first, and not only for tidiness: starting one there
@@ -292,7 +350,7 @@ async function resetEverything(context: vscode.ExtensionContext): Promise<void> 
 
   stopTracking();
   if (root && enabled) workspaceData.disableWorkspace(root);
-  await forgetDebtMode(context.workspaceState);
+  await forgetDebtChoices(context.workspaceState);
   const config = vscode.workspace.getConfiguration('copyworkcode');
   for (const key of SETTINGS) {
     await config.update(key, undefined, vscode.ConfigurationTarget.Global);

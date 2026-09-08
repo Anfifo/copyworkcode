@@ -17,6 +17,13 @@ Notable changes to CopyWorkCode. Versions follow [semantic versioning](https://s
   stale hook, remove one left behind, or open the file.
 - The unit tests no longer write fixture baselines into the real data home.
 
+### Review
+
+- **Compare Against a Commit** picks an older revision for git mode from a list of recent
+  commits, or takes one typed by hand. The empty git-mode welcome offers it, since a clean
+  tree at `HEAD` is where it is wanted; the header menu has it too. The choice is remembered
+  per workspace and the first entry of the picker goes back to the `gitRef` setting.
+
 ## [0.0.3]
 
 ### Storage

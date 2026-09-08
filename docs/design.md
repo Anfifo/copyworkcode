@@ -209,6 +209,14 @@ It is an override, and a reversible one:
   retype.
 - The header names the revision while the mode is on. A queue that quietly answered a
   different question would be worse than no queue.
+- **An older commit can be picked from the empty state.** A clean tree at `HEAD` is the
+  common way to arrive at "nothing differs", and the answer to it is usually "then compare
+  against the commit before the agent's work". The welcome for that state offers a picker
+  of recent commits, also in the header menu, with a way to type any revision git resolves.
+  The choice is kept per workspace in the extension's own state, so the `gitRef` setting
+  stays the default and a workspace setting is never written into the project. The
+  picker's first entry returns to the setting, and the header carries the picked hash for
+  as long as it is in force.
 
 Git runs as a child process, so the only dependency is git being on `PATH`. A folder with no
 repository, or a revision that doesn't exist, refuses the switch, since an empty queue would

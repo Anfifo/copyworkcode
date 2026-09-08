@@ -30,6 +30,14 @@ export interface GitChange {
   untracked: boolean;
 }
 
+export interface GitCommit {
+  /** Abbreviated hash, unambiguous in this repository when it was read. */
+  short: string;
+  subject: string;
+  /** Relative age as git prints it, "3 days ago". */
+  when: string;
+}
+
 interface GitRun {
   /** The git executable was found and ran to completion. */
   ran: boolean;
@@ -75,6 +83,21 @@ export function gitChanges(root: string, ref: string): GitChange[] | undefined {
     }
   }
   return changes;
+}
+
+/**
+ * The most recent commits on the current branch, newest first, for choosing a
+ * revision to compare against. `undefined` when git cannot answer here.
+ */
+export function gitLog(root: string, limit: number): GitCommit[] | undefined {
+  const run = git(root, ['log', `-n${limit}`, '-z', '--format=%h%x1f%s%x1f%cr', 'HEAD', '--']);
+  if (!run.ok) return undefined;
+  const commits: GitCommit[] = [];
+  for (const record of run.stdout.split('\0')) {
+    const [short, subject, when] = record.split('\x1f');
+    if (short && when !== undefined) commits.push({ short, subject: subject ?? '', when });
+  }
+  return commits;
 }
 
 /**

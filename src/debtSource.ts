@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { filesWithDebt, readBaseline } from './core/baselineStore';
 import { diffLines, hasDebt } from './core/diff';
-import { gitBaseline, gitChanges } from './core/gitBaseline';
+import { GitCommit, gitBaseline, gitChanges, gitLog } from './core/gitBaseline';
 import { isSensitivePath } from './core/sensitive';
 
 /**
@@ -31,10 +31,12 @@ export interface DebtRow {
 }
 
 const MODE_KEY = 'copyworkcode.debtMode';
+const REF_KEY = 'copyworkcode.gitRevision';
 
-/** Drop the remembered mode, so the next source starts on the default. */
-export function forgetDebtMode(state: vscode.Memento): Thenable<void> {
-  return state.update(MODE_KEY, undefined);
+/** Drop the remembered mode and revision, so the next source starts on the defaults. */
+export async function forgetDebtChoices(state: vscode.Memento): Promise<void> {
+  await state.update(MODE_KEY, undefined);
+  await state.update(REF_KEY, undefined);
 }
 
 export class DebtSource implements vscode.Disposable {
@@ -53,13 +55,47 @@ export class DebtSource implements vscode.Disposable {
     return this.state.get<DebtMode>(MODE_KEY) === 'git' ? 'git' : 'tracked';
   }
 
-  /** Revision git mode compares the working tree against. */
+  /**
+   * Revision git mode compares the working tree against: a commit picked for
+   * this workspace when there is one, else the setting.
+   */
   get ref(): string {
+    return this.pickedRef ?? this.configuredRef;
+  }
+
+  /** The setting's revision, which a picked commit stands in for. */
+  get configuredRef(): string {
     const configured = vscode.workspace
       .getConfiguration('copyworkcode')
       .get<string>('gitRef', 'HEAD')
       .trim();
     return configured.length > 0 ? configured : 'HEAD';
+  }
+
+  /** The commit picked for this workspace, if any. */
+  get pickedRef(): string | undefined {
+    return this.state.get<string>(REF_KEY);
+  }
+
+  /**
+   * Compare against `ref` from now on, or against the setting again when it is
+   * `undefined`. Kept in the extension's workspace state, since a workspace
+   * setting would be written into the project.
+   */
+  async setRef(ref: string | undefined): Promise<void> {
+    if (ref === this.pickedRef) return;
+    await this.state.update(REF_KEY, ref);
+    this.emitter.fire();
+  }
+
+  /** True when git can resolve `ref` here. */
+  revisionExists(ref: string): boolean {
+    return gitChanges(this.root, ref) !== undefined;
+  }
+
+  /** Recent commits to offer as revisions. */
+  recentCommits(limit: number): GitCommit[] | undefined {
+    return gitLog(this.root, limit);
   }
 
   /** Names the compared-against side, for view headers and diff titles. */

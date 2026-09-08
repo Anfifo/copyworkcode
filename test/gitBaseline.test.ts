@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { GitChange, gitBaseline, gitChanges } from '../src/core/gitBaseline';
+import { GitChange, gitBaseline, gitChanges, gitLog } from '../src/core/gitBaseline';
 
 const noGit = spawnSync('git', ['--version']).status !== 0;
 
@@ -101,4 +101,20 @@ test('gitBaseline reads the committed content', { skip: noGit }, () => {
     undefined,
     'files outside the workspace are not ours to compare'
   );
+});
+
+test('gitLog lists commits newest first, undefined without a repo', { skip: noGit }, () => {
+  const root = repoWithCommit();
+  fs.writeFileSync(path.join(root, 'kept.ts'), 'one\n');
+  git(root, ['commit', '-q', '-am', 'second: trim kept']);
+  const log = gitLog(root, 10);
+  assert.ok(log);
+  assert.deepEqual(
+    log.map((c) => c.subject),
+    ['second: trim kept', 'first']
+  );
+  assert.match(log[0].short, /^[0-9a-f]{7,}$/);
+  assert.ok(log[0].when.length > 0);
+  assert.deepEqual(gitLog(root, 1)?.length, 1);
+  assert.equal(gitLog(fs.mkdtempSync(path.join(os.tmpdir(), 'cwc-nogit-')), 10), undefined);
 });

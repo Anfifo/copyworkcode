@@ -34,7 +34,9 @@ extension keeps — the snapshots it reviews against and its review log — live
    palette. The extension does nothing in a workspace until you ask it to.
 3. **Choose where changes come from.** Either turn on agent capture (below), or point the
    queue at a git revision with **CopyWorkCode: Compare Against Git** — which needs no setup
-   and is also how you review changes that landed before capture was on.
+   and is also how you review changes that landed before capture was on. If the working tree
+   already matches `HEAD`, **Compare Against a Commit** picks an older one to review
+   everything since.
 4. **Open the CopyWorkCode panel** in the activity bar. Files with unreviewed changes are
    listed there, biggest change first. Click one to start reviewing it.
 
@@ -133,7 +135,7 @@ hands a file to a real editor review carrying whatever the page already covered.
 | --- | --- | --- |
 | `copyworkcode.autoSkipGlobs` | lockfiles, `node_modules` | Globs whose files are marked reviewed without typing |
 | `copyworkcode.agentCapture` | `false` | Whether the agent hook is installed |
-| `copyworkcode.gitRef` | `HEAD` | The revision to compare against in git mode |
+| `copyworkcode.gitRef` | `HEAD` | The revision to compare against in git mode, unless a commit was picked for the workspace |
 | `copyworkcode.startEditing` | `false` | Open every review with the editor already yours |
 | `copyworkcode.animations` | `full` | Typing effects: `full`, `subtle` or `off` |
 

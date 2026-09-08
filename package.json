@@ -105,6 +105,11 @@
         "icon": "$(bookmark)"
       },
       {
+        "command": "copyworkcode.pickGitRevision",
+        "title": "Compare Against a Commit…",
+        "category": "CopyWorkCode"
+      },
+      {
         "command": "copyworkcode.openSettings",
         "title": "Settings",
         "category": "CopyWorkCode",
@@ -225,7 +230,7 @@
       },
       {
         "view": "copyworkcode.debt",
-        "contents": "Nothing differs from the git revision being compared against.\n[Compare Against Last Reviewed](command:copyworkcode.useTrackedBaseline)",
+        "contents": "Nothing differs from the git revision being compared against.\nPick an older commit to review what has changed since it.\n[Compare Against a Commit](command:copyworkcode.pickGitRevision)\n[Compare Against Last Reviewed](command:copyworkcode.useTrackedBaseline)",
         "when": "copyworkcode.enabled && copyworkcode.debtMode == git"
       }
     ],
@@ -282,6 +287,11 @@
           "command": "copyworkcode.resetEverything",
           "when": "view == copyworkcode.debt",
           "group": "2_manage@1"
+        },
+        {
+          "command": "copyworkcode.pickGitRevision",
+          "when": "view == copyworkcode.debt && copyworkcode.enabled",
+          "group": "1_compare@0"
         }
       ],
       "view/item/context": [
@@ -393,6 +403,10 @@
         {
           "command": "copyworkcode.editOnPage",
           "when": "false"
+        },
+        {
+          "command": "copyworkcode.pickGitRevision",
+          "when": "copyworkcode.enabled"
         }
       ]
     },
