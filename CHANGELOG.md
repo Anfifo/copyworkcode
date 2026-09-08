@@ -4,6 +4,8 @@ Notable changes to CopyWorkCode. Versions follow [semantic versioning](https://s
 
 ## [Unreleased]
 
+## [0.0.4]
+
 ### Housekeeping
 
 - **Reset Everything**, in the panel's header menu, returns CopyWorkCode to a fresh install:

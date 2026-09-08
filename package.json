@@ -2,7 +2,7 @@
   "name": "copyworkcode",
   "displayName": "CopyWorkCode",
   "description": "Review AI-generated code changes by typing them yourself.",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "publisher": "Anfifo",
   "license": "MIT",
   "repository": {
