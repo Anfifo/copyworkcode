@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import {
   advanceBaseline,
   baselineKey,
+  dropBaseline,
   filesWithDebt,
   readBaseline,
   trackedFiles,
@@ -63,4 +64,14 @@ test('EOL-only differences are not debt', () => {
   fs.writeFileSync(file, 'a\r\nb\r\n');
   advanceBaseline(root, file, 'a\nb\n');
   assert.deepEqual(filesWithDebt(root), []);
+});
+
+test('dropping a baseline forgets the file, and says when there was none', () => {
+  const root = tempRoot();
+  const file = path.join(root, 'src', 'x.ts');
+  assert.equal(dropBaseline(root, file), false);
+  advanceBaseline(root, file, 'reviewed\n');
+  assert.equal(dropBaseline(root, file), true);
+  assert.equal(readBaseline(root, file), undefined);
+  assert.deepEqual(trackedFiles(root), []);
 });

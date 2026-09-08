@@ -55,6 +55,23 @@ export function advanceBaseline(
 }
 
 /**
+ * Forget a file's baseline, so it stops counting as reviewed. Git mode hides a
+ * change whose baseline already matches the file, and this is what brings such
+ * a row back after a review that was not wanted. Returns false when there was
+ * no baseline to drop.
+ */
+export function dropBaseline(root: string, file: string): boolean {
+  const p = baselinePath(root, file);
+  if (!p) return false;
+  try {
+    fs.rmSync(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Record the content a file had before its first captured edit, unless a
  * baseline already exists: an existing one is the last-reviewed state, and
  * replacing it would erase unreviewed debt. Returns false when nothing was

@@ -10,7 +10,7 @@ import { DebtDecorations, DebtTreeProvider, RowProgress } from './debtView';
 import { RetypeController, BASELINE_SCHEME, REMOVED_SCHEME } from './retypeController';
 import { HookReport, inspectCaptureHook, syncCaptureHook } from './hookInstaller';
 import { matchesAny } from './core/glob';
-import { advanceBaseline, readBaseline } from './core/baselineStore';
+import { advanceBaseline, dropBaseline, readBaseline } from './core/baselineStore';
 import { hasDebt } from './core/diff';
 import * as workspaceData from './workspaceData';
 import { dataHome } from './core/dataHome';
@@ -111,6 +111,9 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     vscode.commands.registerCommand('copyworkcode.pickGitRevision', () =>
       pickGitRevision()
+    ),
+    vscode.commands.registerCommand('copyworkcode.requeueReviewed', () =>
+      requeueReviewed()
     ),
     vscode.commands.registerCommand('copyworkcode.openSettings', () =>
       vscode.commands.executeCommand('workbench.action.openSettings', 'copyworkcode')
@@ -356,6 +359,42 @@ async function pickGitRevision(): Promise<void> {
   }
   await source.setRef(ref);
   await setDebtMode('git');
+}
+
+/**
+ * Undo reviews that emptied the queue. A review is the only thing that hides a
+ * change git still reports, so dropping it is what puts the row back, and the
+ * pick list is there because clearing the whole queue by mistake and wanting
+ * one file of it back are the same gesture from the reviewer's side.
+ */
+async function requeueReviewed(): Promise<void> {
+  const root = workspaceData.workspaceRoot();
+  if (!root || !source) return;
+  const hidden = source.reviewedHidden();
+  if (hidden.length === 0) {
+    void vscode.window.showInformationMessage(
+      `CopyWorkCode: nothing to put back — no reviewed file differs from ${source.ref}.`
+    );
+    return;
+  }
+  const items = hidden.map((file) => ({
+    label: path.basename(file),
+    description: path.relative(root, path.dirname(file)) || undefined,
+    file,
+    picked: true,
+  }));
+  const picks = await vscode.window.showQuickPick(items, {
+    canPickMany: true,
+    title: `Put reviewed files back in the queue — comparing against ${source.ref}`,
+    placeHolder: 'Their reviews are forgotten and the rows come back.',
+  });
+  if (!picks || picks.length === 0) return;
+  for (const pick of picks) dropBaseline(root, pick.file);
+  tree?.refresh();
+  void vscode.window.setStatusBarMessage(
+    `CopyWorkCode: ${picks.length} back in the queue.`,
+    5000
+  );
 }
 
 /**

@@ -111,6 +111,11 @@
         "category": "CopyWorkCode"
       },
       {
+        "command": "copyworkcode.requeueReviewed",
+        "title": "Put Reviewed Files Back in the Queue…",
+        "category": "CopyWorkCode"
+      },
+      {
         "command": "copyworkcode.openSettings",
         "title": "Settings",
         "category": "CopyWorkCode",
@@ -242,12 +247,22 @@
       {
         "view": "copyworkcode.debt",
         "contents": "Nothing differs from the git revision being compared against.\nYou can compare against an older commit to review everything changed since it.\n[Compare Against an Older Commit](command:copyworkcode.pickGitRevision)",
-        "when": "copyworkcode.enabled && copyworkcode.debtMode == git && !copyworkcode.trackedDebt"
+        "when": "copyworkcode.enabled && copyworkcode.debtMode == git && !copyworkcode.trackedDebt && !copyworkcode.reviewedHidden"
+      },
+      {
+        "view": "copyworkcode.debt",
+        "contents": "Nothing differs from the git revision being compared against.\nYou can compare against an older commit to review everything changed since it, or put back files a review took off the queue.\n[Compare Against an Older Commit](command:copyworkcode.pickGitRevision)\n[Put Reviewed Files Back](command:copyworkcode.requeueReviewed)",
+        "when": "copyworkcode.enabled && copyworkcode.debtMode == git && !copyworkcode.trackedDebt && copyworkcode.reviewedHidden"
       },
       {
         "view": "copyworkcode.debt",
         "contents": "Nothing differs from the git revision being compared against.\nYou can compare against an older commit to review everything changed since it, or go back to the captured changes waiting for review.\n[Compare Against an Older Commit](command:copyworkcode.pickGitRevision)\n[Compare Against Last Reviewed](command:copyworkcode.useTrackedBaseline)",
-        "when": "copyworkcode.enabled && copyworkcode.debtMode == git && copyworkcode.trackedDebt"
+        "when": "copyworkcode.enabled && copyworkcode.debtMode == git && copyworkcode.trackedDebt && !copyworkcode.reviewedHidden"
+      },
+      {
+        "view": "copyworkcode.debt",
+        "contents": "Nothing differs from the git revision being compared against.\nYou can compare against an older commit, put back files a review took off the queue, or go back to the captured changes waiting for review.\n[Compare Against an Older Commit](command:copyworkcode.pickGitRevision)\n[Put Reviewed Files Back](command:copyworkcode.requeueReviewed)\n[Compare Against Last Reviewed](command:copyworkcode.useTrackedBaseline)",
+        "when": "copyworkcode.enabled && copyworkcode.debtMode == git && copyworkcode.trackedDebt && copyworkcode.reviewedHidden"
       }
     ],
     "menus": {
@@ -308,6 +323,11 @@
           "command": "copyworkcode.pickGitRevision",
           "when": "view == copyworkcode.debt && copyworkcode.enabled",
           "group": "1_compare@0"
+        },
+        {
+          "command": "copyworkcode.requeueReviewed",
+          "when": "view == copyworkcode.debt && copyworkcode.enabled && copyworkcode.debtMode == git",
+          "group": "1_compare@1"
         },
         {
           "command": "copyworkcode.openIgnoreFile",
@@ -433,6 +453,10 @@
         {
           "command": "copyworkcode.pickGitRevision",
           "when": "copyworkcode.enabled"
+        },
+        {
+          "command": "copyworkcode.requeueReviewed",
+          "when": "copyworkcode.enabled && copyworkcode.debtMode == git"
         },
         {
           "command": "copyworkcode.ignoreFile",

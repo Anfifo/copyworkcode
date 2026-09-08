@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { filesWithDebt, readBaseline } from './core/baselineStore';
 import { diffLines, hasDebt } from './core/diff';
 import { GitCommit, gitBaseline, gitChanges, gitLog } from './core/gitBaseline';
-import { IGNORE_FILE, isIgnored, readIgnoreRules } from './core/ignoreFile';
+import { IGNORE_FILE, IgnoreRule, isIgnored, readIgnoreRules } from './core/ignoreFile';
 import { isSensitivePath } from './core/sensitive';
 
 /**
@@ -126,22 +126,49 @@ export class DebtSource implements vscode.Disposable {
   /** Files waiting for review in the given mode, largest change first. */
   rows(mode: DebtMode = this.mode): DebtRow[] {
     const ignore = readIgnoreRules(this.root);
-    const rows = (mode === 'git' ? this.gitRows() : this.trackedRows()).filter((row) => {
-      const rel = path.relative(this.root, row.file);
-      // Reviewing writes the file's content to a baseline, so a credentials
-      // file must never reach the queue in the first place. The capture hook
-      // already declines to snapshot one; this covers the two ways a file can
-      // arrive without having gone through it — a baseline written before the
-      // exclusion existed, and git mode, which reports what changed whether or
-      // not anything was capturing. The ignore file keeps out what the reviewer
-      // asked to never see, and itself: a line added to it is not a review.
-      return !isSensitivePath(rel) && rel !== IGNORE_FILE && !isIgnored(rel, ignore);
-    });
+    const rows = (mode === 'git' ? this.gitRows() : this.trackedRows()).filter((row) =>
+      this.queueable(row.file, ignore)
+    );
     return rows.sort(
       (a, b) =>
         b.addedLines + b.removedLines - (a.addedLines + a.removedLines) ||
         a.file.localeCompare(b.file)
     );
+  }
+
+  /**
+   * Files the compared revision still reports as changed that a completed
+   * review is hiding. Git keeps reporting a change until it is committed, so
+   * this is what a queue cleared by mistake can be rebuilt from.
+   */
+  reviewedHidden(): string[] {
+    const changes = gitChanges(this.root, this.ref);
+    if (!changes) return [];
+    const ignore = readIgnoreRules(this.root);
+    return changes
+      .map((change) => change.file)
+      .filter((file) => {
+        const reviewed = readBaseline(this.root, file);
+        return (
+          reviewed !== undefined &&
+          !hasDebt(reviewed, currentContent(file)) &&
+          this.queueable(file, ignore)
+        );
+      });
+  }
+
+  /**
+   * Reviewing writes the file's content to a baseline, so a credentials file
+   * must never reach the queue in the first place. The capture hook already
+   * declines to snapshot one; this covers the two ways a file can arrive
+   * without having gone through it — a baseline written before the exclusion
+   * existed, and git mode, which reports what changed whether or not anything
+   * was capturing. The ignore file keeps out what the reviewer asked to never
+   * see, and itself: a line added to it is not a review.
+   */
+  private queueable(file: string, ignore: IgnoreRule[]): boolean {
+    const rel = path.relative(this.root, file);
+    return !isSensitivePath(rel) && rel !== IGNORE_FILE && !isIgnored(rel, ignore);
   }
 
   private trackedRows(): DebtRow[] {

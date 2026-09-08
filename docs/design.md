@@ -249,6 +249,14 @@ It is an override, and a reversible one:
   picker's first entry returns to the setting, and the header carries the picked hash for
   as long as it is in force. The same welcome offers the way back to the tracked queue only
   while that queue has rows, so its link never lands on another empty view.
+- **A review can be taken back.** The rule above is also how a queue vanishes by mistake:
+  marking a batch reviewed clears every row at once, and git will not raise them again until
+  the change is committed. The set is exactly recoverable — what the revision reports, minus
+  what the queue shows — so a picker offers it with everything checked and drops the snapshot
+  of each file taken back. Dropping is what returns the row, and it leaves the tracked queue
+  claiming no review that never happened. The empty welcome offers the picker only while
+  something is hidden; the header menu carries it while rows are still there. Delete Review
+  Data was the only way back before this, and it takes the whole workspace with it.
 
 Git runs as a child process, so the only dependency is git being on `PATH`. A folder with no
 repository, or a revision that doesn't exist, refuses the switch, since an empty queue would
