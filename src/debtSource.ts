@@ -32,6 +32,11 @@ export interface DebtRow {
 
 const MODE_KEY = 'copyworkcode.debtMode';
 
+/** Drop the remembered mode, so the next source starts on the default. */
+export function forgetDebtMode(state: vscode.Memento): Thenable<void> {
+  return state.update(MODE_KEY, undefined);
+}
+
 export class DebtSource implements vscode.Disposable {
   private emitter = new vscode.EventEmitter<void>();
   /** Fires when the mode changes, so views can re-read their rows. */

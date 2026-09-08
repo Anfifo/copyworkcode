@@ -122,6 +122,35 @@ export function removeHook(settings: Settings): Change {
   return changed ? 'changed' : 'unchanged';
 }
 
+/** What the file says about our hook, for the configuration check. */
+export interface HookDescription {
+  /** Events whose entries carry our hook, in file order. */
+  events: string[];
+  /** The command the first such entry runs, when there is one. */
+  command?: string;
+}
+
+/**
+ * Read-only counterpart of the transforms above: where our hook sits and what
+ * it runs. Tolerates any shape, since it only ever looks.
+ */
+export function describeHook(settings: Settings): HookDescription {
+  const description: HookDescription = { events: [] };
+  const hooks = settings.hooks;
+  if (!isPlainObject(hooks)) return description;
+  for (const [event, entries] of Object.entries(hooks)) {
+    if (!Array.isArray(entries)) continue;
+    for (const entry of entries) {
+      const ours = entryHooks(entry)?.find(isOurCommand);
+      if (!ours) continue;
+      description.events.push(event);
+      description.command ??= ours.command;
+      break;
+    }
+  }
+  return description;
+}
+
 /** Returns true when the entries were modified. */
 function upsert(entries: HookEntry[], command: string): boolean {
   for (const entry of entries) {

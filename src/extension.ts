@@ -5,10 +5,10 @@ import { ChangeEvent } from './types';
 import { EventQueue } from './eventQueue';
 import { ReviewLog } from './reviewState';
 import { ChangeSetPanel } from './changeSetPanel';
-import { DebtMode, DebtSource } from './debtSource';
+import { DebtMode, DebtSource, forgetDebtMode } from './debtSource';
 import { DebtDecorations, DebtTreeProvider, RowProgress } from './debtView';
 import { RetypeController, BASELINE_SCHEME, REMOVED_SCHEME } from './retypeController';
-import { syncCaptureHook } from './hookInstaller';
+import { HookReport, inspectCaptureHook, syncCaptureHook } from './hookInstaller';
 import { matchesAny } from './core/glob';
 import { advanceBaseline, readBaseline } from './core/baselineStore';
 import { hasDebt } from './core/diff';
@@ -47,6 +47,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand('copyworkcode.forgetWorkspace', () =>
       forgetWorkspaceData()
+    ),
+    vscode.commands.registerCommand('copyworkcode.resetEverything', () =>
+      resetEverything(context)
+    ),
+    vscode.commands.registerCommand('copyworkcode.checkAgentHook', () =>
+      checkAgentHook(context)
     ),
     vscode.commands.registerCommand('copyworkcode.installAgentHook', () =>
       setAgentCapture(true)
@@ -253,6 +259,126 @@ async function forgetWorkspaceData(): Promise<void> {
   void vscode.window.showInformationMessage(
     'CopyWorkCode: review data for this workspace deleted.'
   );
+}
+
+/** Every setting the extension contributes, as written in package.json. */
+const SETTINGS = ['autoSkipGlobs', 'animations', 'gitRef', CAPTURE_SETTING, 'startEditing'];
+
+/**
+ * Back to the fresh install: the workspace's review data, the remembered
+ * compare mode, every setting at both scopes, and with the capture setting the
+ * hook. The one confirmation lists all of it, since the settings reach every
+ * workspace and there is no undo. What is left is the enable welcome.
+ */
+async function resetEverything(context: vscode.ExtensionContext): Promise<void> {
+  const root = workspaceData.workspaceRoot();
+  const enabled = root !== undefined && workspaceData.isEnabled(root);
+  const choice = await vscode.window.showWarningMessage(
+    'CopyWorkCode: reset everything?',
+    {
+      modal: true,
+      detail: [
+        enabled
+          ? 'Review data for this workspace is deleted: baselines, captured events and the review log.'
+          : 'This workspace has no review data to delete.',
+        'Agent capture is turned off and the hook is removed from the agent settings.',
+        'Every CopyWorkCode setting goes back to its default, in user and workspace settings.',
+        'This cannot be undone.',
+      ].join('\n'),
+    },
+    'Reset'
+  );
+  if (choice !== 'Reset') return;
+
+  stopTracking();
+  if (root && enabled) workspaceData.disableWorkspace(root);
+  await forgetDebtMode(context.workspaceState);
+  const config = vscode.workspace.getConfiguration('copyworkcode');
+  for (const key of SETTINGS) {
+    await config.update(key, undefined, vscode.ConfigurationTarget.Global);
+    // The capture setting is application-scoped and has no workspace value.
+    if (root && key !== CAPTURE_SETTING) {
+      await config.update(key, undefined, vscode.ConfigurationTarget.Workspace);
+    }
+  }
+  // The setting's listener removes the hook when the setting changed. A hook
+  // left behind with the setting already off is reconciled here.
+  applyAgentCapture(context);
+  void vscode.window.showInformationMessage(
+    'CopyWorkCode: reset. Run Enable in this Workspace to start again.'
+  );
+}
+
+/**
+ * Show what the agent settings file says about the hook next to what the
+ * setting asks for, and offer the way to make them agree. Every button goes
+ * through the setting, or re-runs the reconcile the setting drives, so the
+ * dialog can never leave the two disagreeing.
+ */
+async function checkAgentHook(context: vscode.ExtensionContext): Promise<void> {
+  const report = inspectCaptureHook(context);
+  const wanted = captureWanted();
+  const present = report.events.length > 0;
+  const current = report.command === report.expected;
+
+  const buttons: string[] = [];
+  if (wanted && !(present && current) && report.fileState !== 'unreadable') {
+    buttons.push('Repair Hook');
+  }
+  if (!wanted && present) buttons.push('Remove Hook');
+  buttons.push(wanted ? 'Turn Off Capture' : 'Turn On Capture');
+  if (report.fileState !== 'missing') buttons.push('Open Settings File');
+
+  const choice = await vscode.window.showInformationMessage(
+    'CopyWorkCode: agent hook configuration',
+    { modal: true, detail: describeReport(report, wanted) },
+    ...buttons
+  );
+  switch (choice) {
+    case 'Repair Hook':
+    case 'Remove Hook':
+      applyAgentCapture(context);
+      return;
+    case 'Turn On Capture':
+      return setAgentCapture(true);
+    case 'Turn Off Capture':
+      return setAgentCapture(false);
+    case 'Open Settings File':
+      await vscode.window.showTextDocument(vscode.Uri.file(report.file));
+      return;
+  }
+}
+
+function describeReport(report: HookReport, wanted: boolean): string {
+  const present = report.events.length > 0;
+  const current = report.command === report.expected;
+  const lines = [
+    `Settings file: ${report.file}`,
+    {
+      found: 'File: found.',
+      missing: 'File: not found, so nothing is installed.',
+      unreadable: 'File: found but not valid JSON, so the hook cannot be read or written.',
+    }[report.fileState],
+    present ? `Hook: present on ${report.events.join(', ')}.` : 'Hook: not installed.',
+  ];
+  if (present) {
+    lines.push(
+      current ? 'Command: runs this install.' : `Command: runs another install. ${report.command}`
+    );
+  }
+  lines.push(`Agent capture setting: ${wanted ? 'on' : 'off'}.`, '');
+  if (wanted && present && current) {
+    lines.push('Capture is on and the hook matches this install.');
+  } else if (wanted && present) {
+    lines.push('Capture is on but the hook runs an older copy. Repair points it at this install.');
+  } else if (wanted) {
+    lines.push('Capture is on but the hook is missing. Repair installs it.');
+  } else if (present) {
+    lines.push('Capture is off but the hook is still installed. Remove takes it out.');
+  } else {
+    lines.push('Capture is off and nothing is installed.');
+  }
+  return lines.join('\n');
 }
 
 function startTracking(root: string, context: vscode.ExtensionContext): void {

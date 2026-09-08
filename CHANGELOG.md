@@ -4,6 +4,19 @@ Notable changes to CopyWorkCode. Versions follow [semantic versioning](https://s
 
 ## [Unreleased]
 
+### Housekeeping
+
+- **Reset Everything**, in the panel's header menu, returns CopyWorkCode to a fresh install:
+  the workspace's review data is deleted, the compare mode is forgotten, agent capture is
+  turned off and its hook removed, and every setting goes back to its default in user and
+  workspace settings. One confirmation lists all of it. Delete Review Data for this Workspace
+  is unchanged and still keeps capture on.
+- **Check Agent Hook Configuration**, next to it, shows whether the agent settings file
+  exists, whether the hook is present and which install it points at, and whether that
+  agrees with the capture setting. Its buttons turn capture on or off, repair a missing or
+  stale hook, remove one left behind, or open the file.
+- The unit tests no longer write fixture baselines into the real data home.
+
 ## [0.0.3]
 
 ### Storage

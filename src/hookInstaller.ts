@@ -6,6 +6,7 @@ import {
   Change,
   Settings,
   addHook,
+  describeHook,
   hasHook,
   removeHook,
 } from './core/hookSettings';
@@ -37,6 +38,41 @@ function settingsFile(): string {
   return path.join(os.homedir(), '.claude', 'settings.json');
 }
 
+function hookCommand(context: vscode.ExtensionContext): string {
+  return `node "${context.asAbsolutePath(path.join('hook', 'copyworkcode-hook.js'))}"`;
+}
+
+/** The hook as the settings file has it, next to what this install expects. */
+export interface HookReport {
+  file: string;
+  /** `missing` when there is no settings file, `unreadable` when it will not parse. */
+  fileState: 'found' | 'missing' | 'unreadable';
+  /** Events whose entries run our hook. Empty when it is not installed. */
+  events: string[];
+  /** The command the file runs, when the hook is present. */
+  command?: string;
+  /** The command this install would write. */
+  expected: string;
+}
+
+/**
+ * Look without touching: what the file says, for the configuration check.
+ * Reading errors are part of the report here, where the sync above announces
+ * them, because the check exists to show the state, whatever it is.
+ */
+export function inspectCaptureHook(context: vscode.ExtensionContext): HookReport {
+  const file = settingsFile();
+  const expected = hookCommand(context);
+  if (!fs.existsSync(file)) return { file, fileState: 'missing', events: [], expected };
+  let settings: Settings;
+  try {
+    settings = parseSettings(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return { file, fileState: 'unreadable', events: [], expected };
+  }
+  return { file, fileState: 'found', ...describeHook(settings), expected };
+}
+
 /**
  * Bring the installed hook in line with `enabled`, and report what that took.
  *
@@ -61,9 +97,7 @@ export function syncCaptureHook(
   }
 
   const existed = hasHook(settings);
-  const command = `node "${context.asAbsolutePath(
-    path.join('hook', 'copyworkcode-hook.js')
-  )}"`;
+  const command = hookCommand(context);
   const result: Change = enabled ? addHook(settings, command) : removeHook(settings);
 
   if (result === 'malformed') {
@@ -98,17 +132,21 @@ function readSettings(file: string): Settings | undefined {
     return undefined;
   }
   try {
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      throw new Error('settings root is not an object');
-    }
-    return parsed as Settings;
+    return parseSettings(raw);
   } catch (err) {
     void vscode.window.showErrorMessage(
       `CopyWorkCode: could not parse ${file} — fix it manually first. (${err})`
     );
     return undefined;
   }
+}
+
+function parseSettings(raw: string): Settings {
+  const parsed: unknown = JSON.parse(raw);
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('settings root is not an object');
+  }
+  return parsed as Settings;
 }
 
 /**

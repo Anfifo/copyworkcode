@@ -46,10 +46,19 @@ log of what changed.
 
 It works by adding **one entry to `~/.claude/settings.json`**. That is the only file the
 extension edits that it does not own, it is only touched if you turn capture on, and
-**CopyWorkCode: Turn Off Agent Capture** puts it back as it was.
+**CopyWorkCode: Turn Off Agent Capture** puts it back as it was. **Check Agent Hook
+Configuration**, in the panel's header menu, shows what the file currently says and offers
+to fix a hook that is missing, stale, or left behind.
 
 Files whose contents should not be copied — credentials, keys, environment files — are
 refused before they reach any review surface.
+
+### Starting over
+
+**Delete Review Data for this Workspace** removes everything kept for the open workspace
+and leaves capture on. **Reset Everything**, in the panel's header menu, goes further: it
+also turns capture off, removes the hook, and returns every CopyWorkCode setting to its
+default, so the next thing you see is the same welcome a first install shows.
 
 ## Reviewing
 

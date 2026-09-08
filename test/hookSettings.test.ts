@@ -4,6 +4,7 @@ import {
   HOOK_MATCHER,
   Settings,
   addHook,
+  describeHook,
   hasHook,
   removeHook,
 } from '../src/core/hookSettings';
@@ -133,4 +134,28 @@ test('hasHook recognizes any install location, and nothing else', () => {
   const settings: Settings = {};
   addHook(settings, OURS);
   assert.equal(hasHook(settings), true);
+});
+
+test('describeHook reports where the hook sits and what it runs', () => {
+  const settings = withForeignHook();
+  assert.deepEqual(describeHook(settings), { events: [] });
+  addHook(settings, OURS);
+  assert.deepEqual(describeHook(settings), {
+    events: ['PreToolUse', 'PostToolUse'],
+    command: OURS,
+  });
+});
+
+test('describeHook tolerates a hooks section of any shape', () => {
+  assert.deepEqual(describeHook({ hooks: 'nonsense' }), { events: [] });
+  assert.deepEqual(describeHook({ hooks: { PreToolUse: 42, PostToolUse: [null, 7] } }), {
+    events: [],
+  });
+});
+
+test('describeHook sees a hook left under a single event by an older layout', () => {
+  const settings: Settings = {
+    hooks: { PostToolUse: [{ matcher: 'Write', hooks: [{ type: 'command', command: MOVED }] }] },
+  };
+  assert.deepEqual(describeHook(settings), { events: ['PostToolUse'], command: MOVED });
 });

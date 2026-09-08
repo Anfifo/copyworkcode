@@ -50,6 +50,16 @@
         "category": "CopyWorkCode"
       },
       {
+        "command": "copyworkcode.resetEverything",
+        "title": "Reset Everything",
+        "category": "CopyWorkCode"
+      },
+      {
+        "command": "copyworkcode.checkAgentHook",
+        "title": "Check Agent Hook Configuration",
+        "category": "CopyWorkCode"
+      },
+      {
         "command": "copyworkcode.installAgentHook",
         "title": "Turn On Agent Capture",
         "category": "CopyWorkCode"
@@ -262,6 +272,16 @@
           "command": "copyworkcode.openSettings",
           "when": "view == copyworkcode.debt",
           "group": "navigation@3"
+        },
+        {
+          "command": "copyworkcode.checkAgentHook",
+          "when": "view == copyworkcode.debt",
+          "group": "2_manage@0"
+        },
+        {
+          "command": "copyworkcode.resetEverything",
+          "when": "view == copyworkcode.debt",
+          "group": "2_manage@1"
         }
       ],
       "view/item/context": [

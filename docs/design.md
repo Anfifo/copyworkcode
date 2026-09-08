@@ -76,6 +76,15 @@ Key properties:
   change. A machine that receives the preference through settings sync installs the hook
   itself, and the reconcile is idempotent in both directions — with capture off, the
   default, it returns without opening the settings file at all.
+- **The state can be inspected without being touched.** A check command in the view's
+  header menu reads the settings file and shows, in one dialog, whether the file exists and
+  parses, which events carry the hook, whether its command points at this install or at an
+  older one, and what the capture setting says. The dialog's buttons are the setting's own
+  commands and the reconcile the setting drives: turn capture on or off, repair a hook that
+  is missing or stale while the setting wants it, remove one left behind while the setting
+  does not, or open the file. Nothing the dialog offers can leave the setting and the file
+  disagreeing, because nothing it offers writes the file directly. A dialog was chosen over
+  a page for three facts and two actions.
 - **The settings file is never left half-written.** It belongs to the user and holds far
   more than this hook, so edits are surgical (entries are matched by script name, since the
   extension's install path moves with every update, and anything sharing an event or an
@@ -160,8 +169,19 @@ in the real home from the two files that had not opted in.
 - **Registered means enabled.** Enabling a workspace creates its folder and manifest;
   that folder's existence is the whole of "enabled", for the extension and the hook alike.
   Deleting review data for a workspace, from the palette and behind a confirmation, removes
-  the folder and stops tracking. It is the one destructive command, and the only cleanup
-  that exists: nothing prunes the event log or the review log on its own yet.
+  the folder and stops tracking. It is the only cleanup that exists: nothing prunes the
+  event log or the review log on its own yet.
+- **Reset everything is the fresh install.** A second command, in the view's header menu,
+  deletes the workspace's review data, forgets the remembered compare mode, turns capture
+  off (which removes the hook), and returns every setting to its default at both the user
+  and the workspace scope. The settings are included on purpose: the command exists to see
+  what a first-time user sees, and a kept preference is one thing that user would not have.
+  Because the user scope reaches every workspace, the confirmation lists each of these
+  before anything is touched. Deleting review data stays a separate command, since clearing
+  a workspace while keeping capture on is the common case and the reset would not allow it.
+  What is left after a reset is the enable welcome, and from there the same two-step
+  welcome a first install shows, which is already the question "what do you want to compare
+  against"; a wizard asking it again would be a second copy of that text to keep in step.
 
 ### Comparing against git instead
 
