@@ -191,6 +191,9 @@ Some files are never worth retyping: generated output, vendored code, fixtures. 
 context menu offers **Ignore in Reviews**, which asks how wide the rule is — this file, its
 folder, or its extension anywhere — and appends that line to `.copyworkcodeignore` at the
 workspace root. Matching files leave both queues and are not queued again, in either mode.
+Several rows selected at once are each appended by their own path, with no question asked: a
+selection has nothing in common to widen to, and one dialog per file is a queue of dialogs in
+front of a gesture whose whole point was to be quick.
 
 - **A file in the project, on purpose.** The list is a project rule like a formatter's ignore
   file: committed, shared, read by whoever opens the repository. That is why it is not kept
@@ -724,6 +727,13 @@ current baseline is, live coverage, agent edits, when it was last reviewed and h
 container badge carries the pending count, and one inline button marks a file reviewed without
 typing it. Alt+N moves to the next file in the queue, and finishing a review offers the same
 move.
+
+**The panel holds a selection of several rows**, and the right-click menu acts on all of them:
+a run of files that need no retyping is marked reviewed in one gesture, and a batch of
+generated files leaves the queue for good in another. Both are things a reviewer does to a
+group of files at a time, and doing them a row at a time is where a queue stops being worth
+keeping. The inline button stays aimed at the row it sits on, which is what an inline button
+means.
 
 **Reset current review** is the row's other action, and only a row with an editor review on it
 — running or paused — has it: a file whose review hasn't started has no progress to clear, and a

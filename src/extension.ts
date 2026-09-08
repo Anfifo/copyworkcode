@@ -78,21 +78,28 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
 
     // Both row commands arrive with the tree's element, which is the file path
-    // the item was built from.
-    vscode.commands.registerCommand('copyworkcode.skipFile', (file?: string) => {
-      const root = workspaceData.workspaceRoot();
-      if (!file || !root || !source) return;
-      // Skipping from the view acknowledges what the view is showing, so it
-      // clears the debt against whichever baseline the rows were built from.
-      skipWithoutTyping(root, file, 'skipped', source.baselineFor(file));
-      tree?.refresh();
-    }),
+    // the item was built from, and from the right-click menu with the rows
+    // selected alongside it.
+    vscode.commands.registerCommand(
+      'copyworkcode.skipFile',
+      (file?: string, selection?: string[]) => {
+        const root = workspaceData.workspaceRoot();
+        if (!root || !source) return;
+        // Skipping from the view acknowledges what the view is showing, so it
+        // clears the debt against whichever baseline the rows were built from.
+        for (const target of rowTargets(file, selection)) {
+          skipWithoutTyping(root, target, 'skipped', source.baselineFor(target));
+        }
+        tree?.refresh();
+      }
+    ),
 
     vscode.commands.registerCommand('copyworkcode.resetReview', (file?: string) =>
       retype?.resetReview(file)
     ),
-    vscode.commands.registerCommand('copyworkcode.ignoreFile', (file?: string) =>
-      ignoreFile(file)
+    vscode.commands.registerCommand(
+      'copyworkcode.ignoreFile',
+      (file?: string, selection?: string[]) => ignoreFiles(rowTargets(file, selection))
     ),
     vscode.commands.registerCommand('copyworkcode.openIgnoreFile', () => openIgnoreFile()),
 
@@ -227,14 +234,35 @@ async function setDebtMode(mode: DebtMode): Promise<void> {
 const COMMITS_OFFERED = 40;
 
 /**
- * Keep a queued file out of every future queue. The row's file is the seed; the
- * reviewer picks how wide the line is: this file, its folder, or its extension
- * anywhere. The line goes into the ignore file at the workspace root, which
- * is created by the first one.
+ * Keep queued files out of every future queue. One file is the seed for a
+ * choice of how wide the line is; several are each ignored by their own path,
+ * since a selection has no folder or extension in common to offer.
  */
-async function ignoreFile(file?: string): Promise<void> {
+async function ignoreFiles(files: string[]): Promise<void> {
   const root = workspaceData.workspaceRoot();
-  if (!file || !root) return;
+  if (files.length === 0 || !root) return;
+  if (files.length === 1) {
+    await ignoreOne(root, files[0]);
+    return;
+  }
+  for (const file of files) {
+    const [own] = suggestPatterns(path.relative(root, file));
+    appendIgnore(root, own);
+    void retype?.forget(file, `${path.basename(file)} is ignored now; its review ended.`);
+  }
+  tree?.refresh();
+  void vscode.window.setStatusBarMessage(
+    `CopyWorkCode: ${files.length} files added to ${IGNORE_FILE}.`,
+    5000
+  );
+}
+
+/**
+ * The reviewer picks how wide the line is: this file, its folder, or its
+ * extension anywhere. The line goes into the ignore file at the workspace
+ * root, which is created by the first one.
+ */
+async function ignoreOne(root: string, file: string): Promise<void> {
   const rel = path.relative(root, file);
   const [own, folder, extension] = suggestPatterns(rel);
   const items: vscode.QuickPickItem[] = [{ label: own, description: 'this file' }];
@@ -529,6 +557,9 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
   );
   const view = vscode.window.createTreeView('copyworkcode.debt', {
     treeDataProvider: tree,
+    // The right-click menu acts on every selected row, so a queue can be
+    // cleared or narrowed in one pass.
+    canSelectMany: true,
   });
   tree.attach(view);
 
@@ -596,6 +627,15 @@ function autoSkip(root: string, events: ChangeEvent[]): void {
     // view happens to be comparing against right now does not enter into it.
     skipWithoutTyping(root, event.file, 'auto-skipped', readBaseline(root, event.file));
   }
+}
+
+/**
+ * The rows a menu command acts on. The right-click menu passes the clicked row
+ * and the selection it belongs to; the inline buttons pass the row alone.
+ */
+function rowTargets(file?: string, selection?: string[]): string[] {
+  if (selection && selection.length > 0) return selection;
+  return file ? [file] : [];
 }
 
 /** Advance the baseline to the current content without a retype pass. */

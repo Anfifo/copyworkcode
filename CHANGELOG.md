@@ -4,6 +4,10 @@ Notable changes to CopyWorkCode. Versions follow [semantic versioning](https://s
 
 ## [Unreleased]
 
+- The queue takes a selection of several rows. Ctrl-click or shift-click a run of files and the
+  right-click menu marks all of them reviewed without typing, or ignores all of them. A
+  multi-row ignore appends each file by its own path.
+
 ## [0.0.4]
 
 ### Housekeeping
