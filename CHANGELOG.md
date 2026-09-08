@@ -30,7 +30,9 @@ Notable changes to CopyWorkCode. Versions follow [semantic versioning](https://s
 - **Compare Against a Commit** picks an older revision for git mode from a list of recent
   commits, or takes one typed by hand. The empty git-mode welcome offers it, since a clean
   tree at `HEAD` is where it is wanted; the header menu has it too. The choice is remembered
-  per workspace and the first entry of the picker goes back to the `gitRef` setting.
+  per workspace and the first entry of the picker goes back to the `gitRef` setting. The
+  same welcome shows Compare Against Last Reviewed only while the tracked queue has
+  something to review.
 
 ## [0.0.3]
 

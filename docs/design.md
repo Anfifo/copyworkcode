@@ -244,7 +244,8 @@ It is an override, and a reversible one:
   The choice is kept per workspace in the extension's own state, so the `gitRef` setting
   stays the default and a workspace setting is never written into the project. The
   picker's first entry returns to the setting, and the header carries the picked hash for
-  as long as it is in force.
+  as long as it is in force. The same welcome offers the way back to the tracked queue only
+  while that queue has rows, so its link never lands on another empty view.
 
 Git runs as a child process, so the only dependency is git being on `PATH`. A folder with no
 repository, or a revision that doesn't exist, refuses the switch, since an empty queue would

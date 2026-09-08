@@ -241,8 +241,13 @@
       },
       {
         "view": "copyworkcode.debt",
-        "contents": "Nothing differs from the git revision being compared against.\nPick an older commit to review what has changed since it.\n[Compare Against a Commit](command:copyworkcode.pickGitRevision)\n[Compare Against Last Reviewed](command:copyworkcode.useTrackedBaseline)",
-        "when": "copyworkcode.enabled && copyworkcode.debtMode == git"
+        "contents": "Nothing differs from the git revision being compared against.\nYou can compare against an older commit to review everything changed since it.\n[Compare Against an Older Commit](command:copyworkcode.pickGitRevision)",
+        "when": "copyworkcode.enabled && copyworkcode.debtMode == git && !copyworkcode.trackedDebt"
+      },
+      {
+        "view": "copyworkcode.debt",
+        "contents": "Nothing differs from the git revision being compared against.\nYou can compare against an older commit to review everything changed since it, or go back to the captured changes waiting for review.\n[Compare Against an Older Commit](command:copyworkcode.pickGitRevision)\n[Compare Against Last Reviewed](command:copyworkcode.useTrackedBaseline)",
+        "when": "copyworkcode.enabled && copyworkcode.debtMode == git && copyworkcode.trackedDebt"
       }
     ],
     "menus": {

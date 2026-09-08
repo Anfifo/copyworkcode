@@ -123,10 +123,10 @@ export class DebtSource implements vscode.Disposable {
       : readBaseline(this.root, file);
   }
 
-  /** Files waiting for review in the current mode, largest change first. */
-  rows(): DebtRow[] {
+  /** Files waiting for review in the given mode, largest change first. */
+  rows(mode: DebtMode = this.mode): DebtRow[] {
     const ignore = readIgnoreRules(this.root);
-    const rows = (this.mode === 'git' ? this.gitRows() : this.trackedRows()).filter((row) => {
+    const rows = (mode === 'git' ? this.gitRows() : this.trackedRows()).filter((row) => {
       const rel = path.relative(this.root, row.file);
       // Reviewing writes the file's content to a baseline, so a credentials
       // file must never reach the queue in the first place. The capture hook

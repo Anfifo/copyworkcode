@@ -65,6 +65,15 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
     this.rows = new Map(rows.map((row) => [row.file, row]));
     this.ambiguous = duplicateNames(rows.map((row) => row.file));
     this.updateHeader(rows.length);
+    if (this.source.mode === 'git' && rows.length === 0) {
+      // The empty git welcome offers the tracked queue only while that
+      // queue has rows, so its link never lands on another empty view.
+      void vscode.commands.executeCommand(
+        'setContext',
+        'copyworkcode.trackedDebt',
+        this.source.rows('tracked').length > 0
+      );
+    }
     // The rows are diffed here anyway; handing them on is what keeps the
     // filename tint from having to recompute the whole queue for itself.
     this.decorations?.update(rows);
