@@ -1,5 +1,6 @@
 .vscode/**
 .vscode-test/**
+.github/**
 .claude/**
 src/**
 test/**
@@ -12,6 +13,7 @@ out/**/*.map
 node_modules/**
 .gitattributes
 .gitignore
+.nvmrc
 .vscodeignore
 tsconfig.json
 tsconfig.test.json

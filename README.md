@@ -158,6 +158,24 @@ the queue, the review itself — works without it.
 Early development. The review loop works end to end; intent capture and detection for agents
 beyond Claude Code are still ahead.
 
+## Developing
+
+Node 22 or later (see `.nvmrc`). Then:
+
+```sh
+npm ci
+npm run compile          # or: npm run watch
+npm test                 # unit tests
+npm run test:integration # boots a VS Code instance and drives a real review
+```
+
+The `Run Extension` launch configuration opens a development host with the extension loaded.
+`Run Extension (Demo)` does the same against a generated playground workspace.
+
+The integration suite downloads VS Code into `.vscode-test/` on first run. On Windows, clone
+into a short path; VS Code cannot start from a folder nested deep enough to push its own files
+past the 260-character path limit.
+
 ## License
 
 [MIT](LICENSE)

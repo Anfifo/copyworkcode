@@ -136,26 +136,31 @@ async function main(): Promise<void> {
   commitFixture(fixture);
   fs.writeFileSync(path.join(fixture, 'gitonly.ts'), 'g1\ng2\n');
 
-  await runTests({
-    extensionDevelopmentPath,
-    extensionTestsPath,
-    launchArgs: [fixture, '--disable-extensions', '--disable-workspace-trust'],
-    extensionTestsEnv: { [HOME_ENV]: home },
-  });
+  try {
+    await runTests({
+      extensionDevelopmentPath,
+      extensionTestsPath,
+      launchArgs: [fixture, '--disable-extensions', '--disable-workspace-trust'],
+      extensionTestsEnv: { [HOME_ENV]: home },
+    });
 
-  // Belt and braces: verify the suite's side effects from outside the editor
-  // process, so a suite that silently failed to run cannot pass.
-  const state = JSON.parse(fs.readFileSync(statePath(fixture), 'utf8'));
-  if (state.reviews.length !== 23) {
-    throw new Error(
-      `expected 23 review records in the fixture, found ${state.reviews.length}`
-    );
+    // Belt and braces: verify the suite's side effects from outside the editor
+    // process, so a suite that silently failed to run cannot pass.
+    const state = JSON.parse(fs.readFileSync(statePath(fixture), 'utf8'));
+    if (state.reviews.length !== 23) {
+      throw new Error(
+        `expected 23 review records in the fixture, found ${state.reviews.length}`
+      );
+    }
+    const advanced = fs.readFileSync(path.join(baselines, 'sample.ts'), 'utf8');
+    if (advanced !== 'line1\nline2\nline3\n') {
+      throw new Error('sample.ts baseline was not advanced by the typed review');
+    }
+    console.log('Integration suite side effects verified.');
+  } finally {
+    fs.rmSync(fixture, { recursive: true, force: true });
+    fs.rmSync(home, { recursive: true, force: true });
   }
-  const advanced = fs.readFileSync(path.join(baselines, 'sample.ts'), 'utf8');
-  if (advanced !== 'line1\nline2\nline3\n') {
-    throw new Error('sample.ts baseline was not advanced by the typed review');
-  }
-  console.log('Integration suite side effects verified.');
 }
 
 /**
