@@ -154,7 +154,9 @@ in the real home from the two files that had not opted in.
   `.git/info/exclude`. That put snapshots of the user's files next to those files and made
   the extension write into a repository it doesn't own, however local the file. Neither is
   necessary, so the extension now writes nothing into the project and nothing into `.git`;
-  git is used read-only, for the comparison mode.
+  git is used read-only, for the comparison mode. The one file it does write there,
+  `.copyworkcodeignore`, is the reviewer's own configuration, written on their gesture and
+  holding only the lines they chose; see "Ignoring files" below.
 - **The user's home rather than the editor's storage.** Extensions normally keep files in
   the per-extension folder the editor hands them. That folder is not an option here: the
   capture hook is a bare Node process with no editor API, and the editor may not even be
@@ -182,6 +184,32 @@ in the real home from the two files that had not opted in.
   What is left after a reset is the enable welcome, and from there the same two-step
   welcome a first install shows, which is already the question "what do you want to compare
   against"; a wizard asking it again would be a second copy of that text to keep in step.
+
+### Ignoring files
+
+Some files are never worth retyping: generated output, vendored code, fixtures. A row's
+context menu offers **Ignore in Reviews**, which asks how wide the rule is — this file, its
+folder, or its extension anywhere — and appends that line to `.copyworkcodeignore` at the
+workspace root. Matching files leave both queues and are not queued again, in either mode.
+
+- **A file in the project, on purpose.** The list is a project rule like a formatter's ignore
+  file: committed, shared, read by whoever opens the repository. That is why it is not kept
+  under the data home, where nobody would see it, and not in the editor's settings folder,
+  which is often left out of the repository. It is created by the first ignore and never
+  before, so a workspace that ignores nothing carries nothing. **Open Ignore File** in the
+  panel's header menu opens it for editing by hand, and offers to create it when there is
+  none yet.
+- **Gitignore shape, glob engine.** One pattern per line, `#` comments, `!` to put files
+  back, the last matching line winning. A pattern without a slash matches a name at any
+  depth, a leading slash anchors it to the root, a trailing slash takes a folder and
+  everything in it. Underneath it is the same glob matcher the auto-skip setting uses, so the
+  common lines behave as they do in a gitignore without a second matcher to maintain.
+- **Two lists, two meanings.** The auto-skip setting marks a captured change reviewed
+  without typing: the baseline advances and the log records it. Ignoring touches neither.
+  A file taken off the list later shows everything since it was last reviewed, and the log
+  has nothing for the time it was ignored. The two lists exist because they answer
+  different wants: auto-skip for files that count as reviewed on arrival, ignore for files
+  that are none of the review's business. The ignore file itself is never queued.
 
 ### Comparing against git instead
 

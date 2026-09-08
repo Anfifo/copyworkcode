@@ -14,6 +14,7 @@ import { advanceBaseline, readBaseline } from './core/baselineStore';
 import { hasDebt } from './core/diff';
 import * as workspaceData from './workspaceData';
 import { dataHome } from './core/dataHome';
+import { IGNORE_FILE, appendIgnore, ignoreFilePath, suggestPatterns } from './core/ignoreFile';
 
 let queue: EventQueue | undefined;
 let log: ReviewLog | undefined;
@@ -90,6 +91,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('copyworkcode.resetReview', (file?: string) =>
       retype?.resetReview(file)
     ),
+    vscode.commands.registerCommand('copyworkcode.ignoreFile', (file?: string) =>
+      ignoreFile(file)
+    ),
+    vscode.commands.registerCommand('copyworkcode.openIgnoreFile', () => openIgnoreFile()),
 
     vscode.commands.registerCommand('copyworkcode.useGitBaseline', () =>
       setDebtMode('git')
@@ -220,6 +225,57 @@ async function setDebtMode(mode: DebtMode): Promise<void> {
 }
 
 const COMMITS_OFFERED = 40;
+
+/**
+ * Keep a queued file out of every future queue. The row's file is the seed; the
+ * reviewer picks how wide the line is: this file, its folder, or its extension
+ * anywhere. The line goes into the ignore file at the workspace root, which
+ * is created by the first one.
+ */
+async function ignoreFile(file?: string): Promise<void> {
+  const root = workspaceData.workspaceRoot();
+  if (!file || !root) return;
+  const rel = path.relative(root, file);
+  const [own, folder, extension] = suggestPatterns(rel);
+  const items: vscode.QuickPickItem[] = [{ label: own, description: 'this file' }];
+  if (folder) items.push({ label: folder, description: 'everything in this folder' });
+  if (extension) items.push({ label: extension, description: 'files with this extension, anywhere' });
+  const pick = await vscode.window.showQuickPick(items, {
+    title: `Ignore in reviews — written to ${IGNORE_FILE}`,
+    placeHolder: 'Matching files leave the queue and are not offered again.',
+  });
+  if (!pick) return;
+  appendIgnore(root, pick.label);
+  void retype?.forget(file, `${path.basename(file)} is ignored now; its review ended.`);
+  tree?.refresh();
+  void vscode.window.setStatusBarMessage(
+    `CopyWorkCode: ${pick.label} added to ${IGNORE_FILE}.`,
+    5000
+  );
+}
+
+/**
+ * Open the ignore file to edit it by hand. It does not exist until something
+ * has been ignored, so with no file yet the reviewer is asked before one is
+ * made for them.
+ */
+async function openIgnoreFile(): Promise<void> {
+  const root = workspaceData.workspaceRoot();
+  if (!root) return;
+  const file = ignoreFilePath(root);
+  if (!fs.existsSync(file)) {
+    const choice = await vscode.window.showInformationMessage(
+      `CopyWorkCode: this workspace has no ${IGNORE_FILE} yet. Right-click a file in the queue to ignore it, or create the file now.`,
+      'Create'
+    );
+    if (choice !== 'Create') return;
+    fs.writeFileSync(
+      file,
+      '# Files CopyWorkCode never queues for review. One pattern per line, like a .gitignore.\n'
+    );
+  }
+  await vscode.window.showTextDocument(vscode.Uri.file(file));
+}
 
 /**
  * Choose the revision git mode compares against: one of the recent commits, a
@@ -467,6 +523,10 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
     (file) => retype?.progressFor(file)?.paused === false
   );
   tree = new DebtTreeProvider(root, source, queue, log, rowProgress, decorations);
+  // Edits to the ignore file from outside the editor still reach the queue.
+  const ignoreWatcher = vscode.workspace.createFileSystemWatcher(
+    new vscode.RelativePattern(root, IGNORE_FILE)
+  );
   const view = vscode.window.createTreeView('copyworkcode.debt', {
     treeDataProvider: tree,
   });
@@ -500,6 +560,10 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
       changeSet?.dropFile(file);
     }),
     vscode.workspace.onDidSaveTextDocument(() => tree?.refresh()),
+    ignoreWatcher,
+    ignoreWatcher.onDidCreate(() => tree?.refresh()),
+    ignoreWatcher.onDidChange(() => tree?.refresh()),
+    ignoreWatcher.onDidDelete(() => tree?.refresh()),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('copyworkcode.gitRef')) tree?.refresh();
     })

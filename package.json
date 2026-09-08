@@ -193,6 +193,16 @@
         "title": "Reset Current Review",
         "category": "CopyWorkCode",
         "icon": "$(discard)"
+      },
+      {
+        "command": "copyworkcode.ignoreFile",
+        "title": "Ignore in Reviews",
+        "category": "CopyWorkCode"
+      },
+      {
+        "command": "copyworkcode.openIgnoreFile",
+        "title": "Open Ignore File",
+        "category": "CopyWorkCode"
       }
     ],
     "viewsContainers": {
@@ -281,17 +291,22 @@
         {
           "command": "copyworkcode.checkAgentHook",
           "when": "view == copyworkcode.debt",
-          "group": "2_manage@0"
+          "group": "2_manage@1"
         },
         {
           "command": "copyworkcode.resetEverything",
           "when": "view == copyworkcode.debt",
-          "group": "2_manage@1"
+          "group": "2_manage@2"
         },
         {
           "command": "copyworkcode.pickGitRevision",
           "when": "view == copyworkcode.debt && copyworkcode.enabled",
           "group": "1_compare@0"
+        },
+        {
+          "command": "copyworkcode.openIgnoreFile",
+          "when": "view == copyworkcode.debt && copyworkcode.enabled",
+          "group": "2_manage@0"
         }
       ],
       "view/item/context": [
@@ -309,6 +324,11 @@
           "command": "copyworkcode.resetReview",
           "when": "view == copyworkcode.debt && viewItem == copyworkcode.file.reviewing",
           "group": "1_review"
+        },
+        {
+          "command": "copyworkcode.ignoreFile",
+          "when": "view == copyworkcode.debt && viewItem =~ /^copyworkcode\\.file/",
+          "group": "2_ignore"
         }
       ],
       "commandPalette": [
@@ -406,6 +426,14 @@
         },
         {
           "command": "copyworkcode.pickGitRevision",
+          "when": "copyworkcode.enabled"
+        },
+        {
+          "command": "copyworkcode.ignoreFile",
+          "when": "false"
+        },
+        {
+          "command": "copyworkcode.openIgnoreFile",
           "when": "copyworkcode.enabled"
         }
       ]

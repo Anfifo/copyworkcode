@@ -55,6 +55,15 @@ to fix a hook that is missing, stale, or left behind.
 Files whose contents should not be copied — credentials, keys, environment files — are
 refused before they reach any review surface.
 
+### Ignoring files
+
+Right-click a file in the queue and choose **Ignore in Reviews** to keep it, its folder, or
+its extension out of every future queue. The rule is written to `.copyworkcodeignore` at the
+workspace root, one pattern per line in the shape of a `.gitignore`, and the file is created
+by the first ignore. **Open Ignore File** in the panel's header menu edits it by hand. This
+differs from `copyworkcode.autoSkipGlobs`, which marks matching captured changes as reviewed
+without typing.
+
 ### Starting over
 
 **Delete Review Data for this Workspace** removes everything kept for the open workspace

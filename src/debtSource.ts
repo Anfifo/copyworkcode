@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { filesWithDebt, readBaseline } from './core/baselineStore';
 import { diffLines, hasDebt } from './core/diff';
 import { GitCommit, gitBaseline, gitChanges, gitLog } from './core/gitBaseline';
+import { IGNORE_FILE, isIgnored, readIgnoreRules } from './core/ignoreFile';
 import { isSensitivePath } from './core/sensitive';
 
 /**
@@ -124,15 +125,18 @@ export class DebtSource implements vscode.Disposable {
 
   /** Files waiting for review in the current mode, largest change first. */
   rows(): DebtRow[] {
-    const rows = (this.mode === 'git' ? this.gitRows() : this.trackedRows()).filter(
+    const ignore = readIgnoreRules(this.root);
+    const rows = (this.mode === 'git' ? this.gitRows() : this.trackedRows()).filter((row) => {
+      const rel = path.relative(this.root, row.file);
       // Reviewing writes the file's content to a baseline, so a credentials
       // file must never reach the queue in the first place. The capture hook
       // already declines to snapshot one; this covers the two ways a file can
       // arrive without having gone through it — a baseline written before the
       // exclusion existed, and git mode, which reports what changed whether or
-      // not anything was capturing.
-      (row) => !isSensitivePath(path.relative(this.root, row.file))
-    );
+      // not anything was capturing. The ignore file keeps out what the reviewer
+      // asked to never see, and itself: a line added to it is not a review.
+      return !isSensitivePath(rel) && rel !== IGNORE_FILE && !isIgnored(rel, ignore);
+    });
     return rows.sort(
       (a, b) =>
         b.addedLines + b.removedLines - (a.addedLines + a.removedLines) ||

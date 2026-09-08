@@ -23,6 +23,10 @@ Notable changes to CopyWorkCode. Versions follow [semantic versioning](https://s
   progress; opening the file from the queue picks the review up where it was. Stop Review,
   which discarded progress, is gone. Reset Current Review is the way to discard, and it asks
   first when something has been typed.
+- **Ignore in Reviews**, on a queue row's context menu, keeps a file, its folder, or its
+  extension out of every future queue. The rule is appended to `.copyworkcodeignore` at the
+  workspace root, a gitignore-shaped file created by the first ignore; **Open Ignore File** in
+  the header menu edits it by hand. Ignoring leaves baselines and the review log untouched.
 - **Compare Against a Commit** picks an older revision for git mode from a list of recent
   commits, or takes one typed by hand. The empty git-mode welcome offers it, since a clean
   tree at `HEAD` is where it is wanted; the header menu has it too. The choice is remembered
