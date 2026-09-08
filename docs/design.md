@@ -135,8 +135,10 @@ Consequences:
 
 Everything the extension keeps — baselines, the event log, the review log — lives under
 `~/.copyworkcode/workspaces/<key>/`, one folder per workspace, and nowhere inside the
-workspace itself. `COPYWORKCODE_HOME` relocates the whole tree; the tests use it to keep
-their data apart from the real one.
+workspace itself. `COPYWORKCODE_HOME` relocates the whole tree. The unit suite sets it once,
+in a file loaded before any test, so a test that reaches the store lands in a temporary
+folder whether or not it asked for one; the earlier per-test opt-in left fixture baselines
+in the real home from the two files that had not opted in.
 
 - **Out of the project, out of its git.** An earlier version kept the data in a
   `.copyworkcode/` folder at the workspace root and hid it by appending a line to

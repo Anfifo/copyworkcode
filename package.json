@@ -511,7 +511,7 @@
     "publish": "vsce publish",
     "demo:seed": "node scripts/seed-demo.js",
     "pretest": "npm run clean && tsc -p ./ && tsc -p tsconfig.test.json",
-    "test": "node --test \"out-test/test/*.test.js\"",
+    "test": "node --import ./out-test/test/setup.js --test \"out-test/test/*.test.js\"",
     "test:integration": "tsc -p ./ && tsc -p tsconfig.test.json && node out-test/test-integration/runTest.js"
   },
   "devDependencies": {
