@@ -430,11 +430,11 @@ export class RetypeController implements vscode.Disposable {
 
   /**
    * Set a review down without ending it, because the reviewer asked for another
-   * file. Everything on screen goes — the overlay, the lens strip, the status
-   * bar — and the read-only flag lifts, so the file being left behind is an
-   * ordinary editor. Left flagged, it would refuse to be typed in for reasons
-   * nothing is showing. What stays is the state: the sections, what each
-   * one has covered, and the version the review is against.
+   * file or asked to pause. Everything on screen goes — the overlay, the lens
+   * strip, the status bar — and the read-only flag lifts, so the file being
+   * left behind is an ordinary editor. Left flagged, it would refuse to be
+   * typed in for reasons nothing is showing. What stays is the state: the
+   * sections, what each one has covered, and the version the review is against.
    */
   private async park(s: Session): Promise<void> {
     this.session = undefined;
@@ -1294,19 +1294,15 @@ export class RetypeController implements vscode.Disposable {
   // --- ending -----------------------------------------------------------------
 
   /**
-   * Stop reviewing without recording an outcome. There is nothing to restore:
-   * whatever the reviewer typed or rewrote is already in
+   * Set the live review down on request. Nothing is recorded and nothing is
+   * lost: the sections keep their positions and opening the file from the
+   * queue picks them up. Whatever the reviewer typed or rewrote is already in
    * the file, and the file's debt is recomputed from its content the next time
    * the queue is read.
    */
-  abort(message?: string): Promise<void> {
+  pause(): Promise<void> {
     return this.serialize(async () => {
-      if (!this.session) return;
-      await this.stop(
-        message ??
-          'review stopped and its progress discarded. Your edits stay in the ' +
-            'file; the debt stays too.'
-      );
+      if (this.session) await this.park(this.session);
     });
   }
 
@@ -1745,11 +1741,11 @@ export class RetypeController implements vscode.Disposable {
         'copyworkcode.showReviewDiff',
         `Open the diff against ${this.source.baselineLabel} side by side (Alt+D)`
       );
-      const stopLens = lens(
-        'Stop',
-        'copyworkcode.abortReview',
-        'Stop this review and discard its progress — your edits stay in the ' +
-          'file and the debt stays (Shift+Esc)'
+      const pauseLens = lens(
+        'Pause',
+        'copyworkcode.pauseReview',
+        'Hand the editor back and keep the progress — opening the file from ' +
+          'the queue picks the review up here (Shift+Esc)'
       );
       const editLens = s.editing
         ? lens(
@@ -1772,7 +1768,7 @@ export class RetypeController implements vscode.Disposable {
           ),
           editLens,
           diffLens,
-          stopLens
+          pauseLens
         );
         continue;
       }
@@ -1790,7 +1786,7 @@ export class RetypeController implements vscode.Disposable {
           'Fill in this whole section and move on, recorded as skipped (Alt+S)'
         ),
         diffLens,
-        stopLens
+        pauseLens
       );
     }
 
@@ -1942,7 +1938,7 @@ export class RetypeController implements vscode.Disposable {
     const claimed = claimedCount(s.sections);
     const total = s.sections.length;
     const flag = note ? `$(error) ${note} — ` : '';
-    const stop = 'Shift+Esc stop';
+    const stop = 'Shift+Esc pause';
 
     if (s.editing) {
       return (

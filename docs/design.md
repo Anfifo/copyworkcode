@@ -244,7 +244,7 @@ What the reviewer sees: text still owed is dimmed; the section being worked on c
 whole-line highlight, a left border, and a scrollbar mark; and the exact run the next
 keystroke should produce is highlighted at the cursor. A lens strip floats above that section
 with its progress ("Typed 34/120 · 6/9 claimed") and clickable write-here (Ctrl+E),
-fill-line (Alt+F), skip (Alt+S), show-diff (Alt+D) and stop (Shift+Esc) actions. Writing
+fill-line (Alt+F), skip (Alt+S), show-diff (Alt+D) and pause (Shift+Esc) actions. Writing
 leads, because disagreeing with the code is the point of a review and the fills are
 conveniences that don't need advertising. Every *other* section still owed
 carries a one-click "start here" lens, because there is no order to fall back on any more —
@@ -457,7 +457,7 @@ It is a global command — every keystroke in the window would otherwise take a 
 through the extension just to be handed back to the editor — and a review outlives its tab, so
 it can be the active editor for a small fraction of the time it exists.
 
-What this model gives up, deliberately: **stopping a review does not always leave the file
+What this model gives up, deliberately: **pausing a review does not always leave the file
 untouched.** A review with no editing in it leaves the file byte-identical, but anything
 written with editing enabled is already in it — that is what "lands in real time" means. And
 completing a review advances the baseline to *the buffer's content*, which may be the
@@ -585,9 +585,17 @@ no check: per-section progress is remapped as the file moves, so there is nothin
 verify when it is picked up. Two things end a parked review outright, and both are about
 having nothing left to point at — its document closing, since its offsets
 describe a buffer that no longer exists, and its baseline going away. A live review ends on
-those terms and three more: the file marked reviewed from the queue, the change set page taking
-it over, and the reviewer stopping it. Stopping (Shift+Esc) is now the only gesture that throws
-review progress away on purpose, and it says as much.
+those terms and two more: the file marked reviewed from the queue, and the change set page
+taking it over. No gesture throws progress away except Reset Current Review, which asks first
+when there is something to lose.
+
+Shift+Esc pauses the live review: the same parking as switching files, on request. An earlier
+version stopped the review there and discarded its progress. In a flow where Shift is held for
+every capital and every brace, a chord one modifier away from Esc is a slip waiting to happen,
+and the reviewer who slipped was handed a writable file with no way back to where they were.
+The file handed back is an ordinary editor, so keystrokes that follow the pause are edits and
+the tab shows them unsaved, the way any editor does; the progress is safe regardless, and the
+queue row says `paused` until the file is opened again.
 
 A review outlives its *tab* being closed only as far as the document does — usually a moment
 longer, since an accidental close is not a decision to abandon a file, but no further. The

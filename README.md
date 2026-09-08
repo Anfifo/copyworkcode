@@ -102,7 +102,7 @@ off. Neither direction loses progress, and anything you changed by hand is recor
 | <kbd>Alt</kbd>+<kbd>D</kbd> | Show the diff against the baseline |
 | <kbd>Alt</kbd>+<kbd>N</kbd> | Review the next file in the queue |
 | <kbd>Alt</kbd>+<kbd>Enter</kbd> | Finish the review |
-| <kbd>Shift</kbd>+<kbd>Esc</kbd> | Stop the review, keeping the debt |
+| <kbd>Shift</kbd>+<kbd>Esc</kbd> | Pause the review; the file is yours again and the progress waits in the queue |
 
 Every one of these is a normal keybinding and can be rebound in Keyboard Shortcuts.
 

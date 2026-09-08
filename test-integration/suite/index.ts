@@ -130,19 +130,27 @@ export async function run(): Promise<void> {
   assert.equal(baselineOf('skipfile.ts'), 'x\ny\n');
   assert.equal(reviews()[2].outcome, 'skipped');
 
-  // --- Stopping records nothing and leaves the debt --------------------------
-  const aborted = await review('aborted.ts');
+  // --- Pausing records nothing, leaves the debt, and keeps the progress ------
+  const paused = await review('aborted.ts');
   await type('t');
   assert.equal(
-    aborted.getText(),
+    paused.getText(),
     'one\ntwo\n',
     'matched keystrokes change nothing in the buffer'
   );
-  await exec('copyworkcode.abortReview');
+  await exec('copyworkcode.pauseReview');
   await settle();
-  assert.equal(aborted.isDirty, false, 'stopping a matched review leaves it clean');
-  assert.equal(baselineOf('aborted.ts'), 'one\n', 'stopping leaves debt in place');
-  assert.equal(reviews().length, 3, 'stopping records no review');
+  assert.equal(paused.isDirty, false, 'pausing a matched review leaves it clean');
+  assert.equal(baselineOf('aborted.ts'), 'one\n', 'pausing leaves debt in place');
+  assert.equal(reviews().length, 3, 'pausing records no review');
+  await review('aborted.ts');
+  assert.equal(
+    paused.offsetAt(editorOf('aborted.ts').selection.active),
+    5,
+    'opening the file again picks the review up one character in'
+  );
+  await exec('copyworkcode.pauseReview');
+  await settle();
 
   // --- A doubled gesture starts exactly one review --------------------------
   await Promise.all([
@@ -792,7 +800,7 @@ export async function run(): Promise<void> {
     !(await hoverAt(cleared, 1)).includes('gone'),
     'and the claimed section no longer marks what it removed'
   );
-  await exec('copyworkcode.abortReview');
+  await exec('copyworkcode.pauseReview');
   await settle();
 
   // --- Clicking back into text already typed --------------------------------
@@ -807,7 +815,7 @@ export async function run(): Promise<void> {
   await type('d');
   assert.equal(caretIn(), 7, 'and the next key is matched as if nothing had moved');
   assert.equal(retouch.getText(), 't1\nabcdef\n');
-  await exec('copyworkcode.abortReview');
+  await exec('copyworkcode.pauseReview');
   await settle();
 
   // --- Reset: every section owed again --------------------------------------
@@ -835,7 +843,7 @@ export async function run(): Promise<void> {
     's1\nsecond\nthird\n',
     'a reset with nothing written leaves the file exactly as it was'
   );
-  await exec('copyworkcode.abortReview');
+  await exec('copyworkcode.pauseReview');
   await settle();
 
   // --- Moving to another file parks a review for later ----------------------
@@ -904,10 +912,10 @@ export async function run(): Promise<void> {
     'the second parked review survived the first one finishing'
   );
 
-  await exec('copyworkcode.abortReview');
+  await exec('copyworkcode.pauseReview');
   await settle();
 
-  await exec('copyworkcode.abortReview');
+  await exec('copyworkcode.pauseReview');
   await settle();
 
   // --- A review that opens on a deletion ------------------------------------

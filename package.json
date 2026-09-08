@@ -136,10 +136,10 @@
         "category": "CopyWorkCode"
       },
       {
-        "command": "copyworkcode.abortReview",
-        "title": "Stop Review",
+        "command": "copyworkcode.pauseReview",
+        "title": "Pause Review",
         "category": "CopyWorkCode",
-        "icon": "$(stop-circle)"
+        "icon": "$(debug-pause)"
       },
       {
         "command": "copyworkcode.finishReview",
@@ -247,7 +247,7 @@
           "group": "navigation@1"
         },
         {
-          "command": "copyworkcode.abortReview",
+          "command": "copyworkcode.pauseReview",
           "when": "copyworkcode.reviewing",
           "group": "navigation@2"
         }
@@ -353,7 +353,7 @@
           "when": "copyworkcode.reviewing"
         },
         {
-          "command": "copyworkcode.abortReview",
+          "command": "copyworkcode.pauseReview",
           "when": "copyworkcode.reviewing"
         },
         {
@@ -452,7 +452,7 @@
         "when": "copyworkcode.reviewing && copyworkcode.reviewComplete && editorTextFocus"
       },
       {
-        "command": "copyworkcode.abortReview",
+        "command": "copyworkcode.pauseReview",
         "key": "shift+escape",
         "when": "copyworkcode.reviewing && editorTextFocus"
       },

@@ -111,7 +111,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('copyworkcode.peekRemoved', (start: number) =>
       retype?.peekRemoved(start)
     ),
-    vscode.commands.registerCommand('copyworkcode.abortReview', () => retype?.abort()),
+    vscode.commands.registerCommand('copyworkcode.pauseReview', () => retype?.pause()),
     vscode.commands.registerCommand('copyworkcode.finishReview', () =>
       retype?.finishReview()
     ),

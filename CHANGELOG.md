@@ -19,6 +19,10 @@ Notable changes to CopyWorkCode. Versions follow [semantic versioning](https://s
 
 ### Review
 
+- **Shift+Esc pauses the review.** The editor is handed back and every section keeps its
+  progress; opening the file from the queue picks the review up where it was. Stop Review,
+  which discarded progress, is gone. Reset Current Review is the way to discard, and it asks
+  first when something has been typed.
 - **Compare Against a Commit** picks an older revision for git mode from a list of recent
   commits, or takes one typed by hand. The empty git-mode welcome offers it, since a clean
   tree at `HEAD` is where it is wanted; the header menu has it too. The choice is remembered
