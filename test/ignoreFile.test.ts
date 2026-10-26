@@ -69,3 +69,10 @@ test('suggestPatterns offers the file, its folder and its extension', () => {
   assert.deepEqual(suggestPatterns('Makefile'), ['/Makefile']);
   assert.deepEqual(suggestPatterns('a\\b.md'), ['/a/b.md', '/a/', '*.md']);
 });
+
+test('a bare folder pattern takes that folder at any depth', () => {
+  const r = rules('out/\n');
+  assert.equal(isIgnored('out/main.js', r), true);
+  assert.equal(isIgnored('packages/a/out/main.js', r), true);
+  assert.equal(isIgnored('src/out.ts', r), false);
+});

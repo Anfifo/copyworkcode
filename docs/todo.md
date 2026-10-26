@@ -36,6 +36,21 @@ promoted here when they're deemed worth building.
         read as handed on, or as lost? Its regions stay drawn; an italic path and
         `being reviewed in the editor` in the heading are all that say so. Is reloading enough
         to get a file back, or is returning one without re-reading the change set a real want?
+- [ ] **Dogfood command capture.** The hook records what a shell command wrote, found by
+      modification time once the command returns; the mechanism is in design.md. What only
+      use can settle:
+      - Two seconds of slack before the command's start: enough for every filesystem in
+        use, and narrow enough that a save in the editor during a long command is not
+        attributed to the command.
+      - Without git, a file a command stamped but left as it was is taken as new in full,
+        since nothing is there to compare against. Whether that happens often enough to
+        want a lighter answer, or whether every project that hits it has git anyway.
+      - A command that exits non-zero reports through a separate event the hook is not
+        registered for, so what it wrote before failing goes unseen until the next command
+        or edit touches the same file. Whether that is worth a third event in the settings
+        entry.
+      - The walk's cost on the largest workspace in use. It is under 40 ms on the ones it
+        was measured on.
 - [ ] **Per-project override for content exclusion** — the exclusion patterns are fixed;
       a project keeping secrets under a name the list doesn't cover has no way to add it,
       and no way to reclaim a source file the list catches by mistake.
@@ -65,7 +80,8 @@ promoted here when they're deemed worth building.
         flagged nothing. It makes flagging reliable and costs a model turn each time, so it
         would be off by default.
 - [ ] **Heuristic detection layer** — tool-agnostic fallback for assistants without hooks,
-      a whole file pasted from a chat window, or external tools writing to disk. Large
+      a whole file pasted from a chat window, or a program writing to disk outside any
+      agent's shell. Large
       multi-line insertions in the editor that don't match keystroke-by-keystroke typing
       (paste / programmatic apply) and writes that land on disk outside the editor become
       candidate events, writing a baseline first if the file has none, exactly as the hook

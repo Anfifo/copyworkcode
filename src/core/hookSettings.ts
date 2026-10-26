@@ -15,8 +15,11 @@
 /** Identifies our hook, whatever path it was installed from. */
 const HOOK_MARKER = 'copyworkcode-hook.js';
 
-/** Tool names the capture hook runs for. */
-export const HOOK_MATCHER = 'Edit|Write|NotebookEdit';
+/**
+ * Tool names the capture hook runs for: the file tools, and the shells, whose
+ * writes the hook finds afterwards by looking at the workspace.
+ */
+export const HOOK_MATCHER = 'Edit|Write|NotebookEdit|Bash|PowerShell';
 
 /** PreToolUse snapshots the pre-change baseline; PostToolUse records the event. */
 const HOOK_EVENTS = ['PreToolUse', 'PostToolUse'] as const;
@@ -154,10 +157,19 @@ export function describeHook(settings: Settings): HookDescription {
 /** Returns true when the entries were modified. */
 function upsert(entries: HookEntry[], command: string): boolean {
   for (const entry of entries) {
-    const ours = entryHooks(entry)?.find(isOurCommand);
-    if (!ours) continue;
-    if (ours.command === command) return false;
-    ours.command = command; // the extension moved; point at the new location
+    const commands = entryHooks(entry);
+    const ours = commands?.find(isOurCommand);
+    if (!commands || !ours) continue;
+    if (ours.command === command && entry.matcher === HOOK_MATCHER) return false;
+    // The extension moved, or a newer version listens for more tools. An entry
+    // that is ours alone is brought up to date in place; one shared with
+    // somebody else's hook keeps its matcher, and ours moves to its own entry.
+    if (commands.length > 1) {
+      entry.hooks = commands.filter((each) => each !== ours);
+      break;
+    }
+    ours.command = command;
+    entry.matcher = HOOK_MATCHER;
     return true;
   }
   entries.push({ matcher: HOOK_MATCHER, hooks: [{ type: 'command', command }] });

@@ -192,9 +192,9 @@ test('does nothing in a workspace that has not enabled the extension', () => {
   assert.equal(fs.existsSync(workspaceDir(root)), false);
 });
 
-test('ignores non-file tools', () => {
+test('ignores tools that touch no files', () => {
   const root = enabledWorkspace();
-  runHook(payload(root, 'PostToolUse', 'Bash', { command: 'ls' }));
+  runHook(payload(root, 'PostToolUse', 'Grep', { pattern: 'x' }));
   assert.deepEqual(readEvents(root), []);
 });
 
@@ -266,4 +266,167 @@ test('code that handles secrets is captured in full', () => {
     kind: 'write',
     content: 'export const key = read();\n',
   });
+});
+
+const noGit = spawnSync('git', ['--version']).status !== 0;
+
+/** Stamp a file as written well before any command under test ran. */
+function age(file: string): void {
+  stampAgo(file, 60_000);
+}
+
+function commandPayload(
+  cwd: string,
+  hookEvent: 'PreToolUse' | 'PostToolUse',
+  durationMs = 1000,
+  tool = 'Bash'
+) {
+  return {
+    ...payload(cwd, hookEvent, tool, { command: 'make' }),
+    tool_response: { stdout: '', stderr: '', interrupted: false, isImage: false },
+    duration_ms: durationMs,
+  };
+}
+
+/** Stamp a file as written `ms` ago. */
+function stampAgo(file: string, ms: number): void {
+  const at = new Date(Date.now() - ms);
+  fs.utimesSync(file, at, at);
+}
+
+test('a long command records what it wrote early in its run', () => {
+  const root = enabledWorkspace();
+  const early = path.join(root, 'early.ts');
+  fs.writeFileSync(early, 'early\n');
+  stampAgo(early, 20_000);
+  const before = path.join(root, 'before.ts');
+  fs.writeFileSync(before, 'before\n');
+  stampAgo(before, 40_000);
+
+  runHook(commandPayload(root, 'PostToolUse', 30_000));
+  assert.deepEqual(
+    readEvents(root).map((e) => e.file),
+    [early]
+  );
+});
+
+test('a PowerShell command is recorded like a Bash one', () => {
+  const root = enabledWorkspace();
+  const written = path.join(root, 'out.txt');
+  fs.writeFileSync(written, 'written\n');
+
+  runHook(commandPayload(root, 'PostToolUse', 1000, 'PowerShell'));
+  const events = readEvents(root);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].file, written);
+  assert.equal(events[0].toolName, 'PowerShell');
+});
+
+test('a command run records the files written meanwhile, without content', () => {
+  const root = enabledWorkspace();
+  const old = path.join(root, 'old.ts');
+  fs.writeFileSync(old, 'old\n');
+  age(old);
+  const written = path.join(root, 'src', 'gen.ts');
+  fs.mkdirSync(path.dirname(written), { recursive: true });
+  fs.writeFileSync(written, 'generated\n');
+
+  const { status } = runHook(commandPayload(root, 'PostToolUse'));
+  assert.equal(status, 0);
+  const events = readEvents(root);
+  assert.equal(events.length, 1);
+  const e = events[0];
+  assert.equal(e.file, written);
+  assert.equal(e.toolName, 'Bash');
+  assert.equal(e.change, undefined);
+  assert.equal(e.id, 'toolu_123:src%2Fgen.ts');
+  assert.equal(e.intentRef.toolUseId, 'toolu_123');
+  // Nothing knew the file before, so all of it is new.
+  assert.equal(fs.readFileSync(baselinePath(root, 'src%2Fgen.ts'), 'utf8'), '');
+  assert.equal(fs.existsSync(baselinePath(root, 'old.ts')), false);
+});
+
+test('a command run leaves a tracked file alone unless it differs from its baseline', () => {
+  const root = enabledWorkspace();
+  const same = path.join(root, 'same.ts');
+  const changed = path.join(root, 'changed.ts');
+  fs.writeFileSync(same, 'v1\n');
+  fs.writeFileSync(changed, 'v1\n');
+  runHook(payload(root, 'PreToolUse', 'Edit', { file_path: same, old_string: '', new_string: '' }));
+  runHook(payload(root, 'PreToolUse', 'Edit', { file_path: changed, old_string: '', new_string: '' }));
+  fs.writeFileSync(same, 'v1\n');
+  fs.writeFileSync(changed, 'v2\n');
+
+  runHook(commandPayload(root, 'PostToolUse'));
+  assert.deepEqual(
+    readEvents(root).map((e) => e.file),
+    [changed]
+  );
+  assert.equal(fs.readFileSync(baselinePath(root, 'same.ts'), 'utf8'), 'v1\n');
+});
+
+test('with git present, a file left as committed is not recorded and a changed one starts from its committed content', { skip: noGit }, () => {
+  const root = enabledWorkspace();
+  const git = (args: string[]) => spawnSync('git', args, { cwd: root });
+  git(['init', '-q']);
+  git(['config', 'user.email', 'test@example.com']);
+  git(['config', 'user.name', 'Test']);
+  git(['config', 'commit.gpgsign', 'false']);
+  const kept = path.join(root, 'kept.ts');
+  const edited = path.join(root, 'edited.ts');
+  fs.writeFileSync(kept, 'kept\n');
+  fs.writeFileSync(edited, 'before\n');
+  git(['add', '.']);
+  git(['commit', '-q', '-m', 'first']);
+  fs.writeFileSync(kept, 'kept\n');
+  fs.writeFileSync(edited, 'after\n');
+
+  runHook(commandPayload(root, 'PostToolUse'));
+  assert.deepEqual(
+    readEvents(root).map((e) => e.file),
+    [edited]
+  );
+  assert.equal(fs.readFileSync(baselinePath(root, 'edited.ts'), 'utf8'), 'before\n');
+  assert.equal(fs.existsSync(baselinePath(root, 'kept.ts')), false);
+});
+
+test('a command run skips what the ignore files leave out', () => {
+  const root = enabledWorkspace();
+  fs.writeFileSync(path.join(root, '.gitignore'), 'out/\n');
+  age(path.join(root, '.gitignore'));
+  fs.mkdirSync(path.join(root, 'out'));
+  fs.writeFileSync(path.join(root, 'out', 'bundle.js'), 'built\n');
+  fs.mkdirSync(path.join(root, 'node_modules', 'dep'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'node_modules', 'dep', 'index.js'), 'dep\n');
+  const source = path.join(root, 'main.ts');
+  fs.writeFileSync(source, 'main\n');
+
+  runHook(commandPayload(root, 'PostToolUse'));
+  assert.deepEqual(
+    readEvents(root).map((e) => e.file),
+    [source]
+  );
+});
+
+test('a credentials file written by a command is an occurrence with no baseline', () => {
+  const root = enabledWorkspace();
+  const env = path.join(root, '.env');
+  fs.writeFileSync(env, 'TOKEN=super-secret\n');
+
+  runHook(commandPayload(root, 'PostToolUse'));
+  const events = readEvents(root);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].file, env);
+  assert.equal(events[0].change, undefined);
+  assert.equal(fs.existsSync(path.join(workspaceDir(root), 'baselines')), false);
+  const raw = fs.readFileSync(path.join(workspaceDir(root), 'events.jsonl'), 'utf8');
+  assert.equal(raw.includes('super-secret'), false);
+});
+
+test('a command about to run records nothing', () => {
+  const root = enabledWorkspace();
+  fs.writeFileSync(path.join(root, 'a.ts'), 'a\n');
+  runHook(commandPayload(root, 'PreToolUse'));
+  assert.deepEqual(readEvents(root), []);
+  assert.equal(fs.existsSync(path.join(workspaceDir(root), 'baselines')), false);
 });

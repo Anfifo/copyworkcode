@@ -43,7 +43,10 @@ home folder. Nothing is written inside your project, and nothing leaves your mac
 ### Agent capture
 
 `CopyWorkCode: Turn On Agent Capture` records edits made by Claude Code through its hooks.
-Each file is snapshotted before the edit, and the edit is logged.
+Each file is snapshotted before the edit, and the edit is logged. Files written by a shell
+command are found afterwards by their modification time and logged the same way. The first
+snapshot of such a file is its committed content when the project is a git repository, and
+empty otherwise, so the whole file is up for review.
 
 Capture works by adding one entry to `~/.claude/settings.json`. It is the only file the
 extension edits that it does not own, it is touched only when you turn capture on, and

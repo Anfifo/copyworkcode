@@ -159,3 +159,40 @@ test('describeHook sees a hook left under a single event by an older layout', ()
   };
   assert.deepEqual(describeHook(settings), { events: ['PostToolUse'], command: MOVED });
 });
+
+test('addHook widens the matcher of an entry installed by an older version', () => {
+  const settings: Settings = {
+    hooks: {
+      PreToolUse: [{ matcher: 'Edit|Write', hooks: [{ type: 'command', command: OURS }] }],
+      PostToolUse: [{ matcher: 'Edit|Write', hooks: [{ type: 'command', command: OURS }] }],
+    },
+  };
+  assert.equal(addHook(settings, OURS), 'changed');
+  const hooks = settings.hooks as Record<string, Array<{ matcher: string }>>;
+  assert.equal(hooks.PreToolUse[0].matcher, HOOK_MATCHER);
+  assert.equal(hooks.PostToolUse[0].matcher, HOOK_MATCHER);
+  assert.deepEqual(commandsFor(settings, 'PreToolUse'), [OURS]);
+  assert.equal(addHook(settings, OURS), 'unchanged');
+});
+
+test('addHook leaves a shared entry its matcher and gives ours its own', () => {
+  const settings: Settings = {
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: 'Edit',
+          hooks: [
+            { type: 'command', command: THEIRS },
+            { type: 'command', command: OURS },
+          ],
+        },
+      ],
+    },
+  };
+  assert.equal(addHook(settings, OURS), 'changed');
+  const entries = (settings.hooks as Record<string, Array<{ matcher: string }>>).PreToolUse;
+  assert.equal(entries.length, 2);
+  assert.equal(entries[0].matcher, 'Edit');
+  assert.equal(entries[1].matcher, HOOK_MATCHER);
+  assert.deepEqual(commandsFor(settings, 'PreToolUse'), [THEIRS, OURS]);
+});

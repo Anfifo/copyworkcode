@@ -50,12 +50,21 @@ export function readIgnoreRules(root: string): IgnoreRule[] {
 
 /** Whether `relativePath`, workspace-relative, is kept out of the queue. */
 export function isIgnored(relativePath: string, rules: IgnoreRule[]): boolean {
+  return lastMatch(relativePath, rules) ?? false;
+}
+
+/**
+ * What the last rule to match says, or nothing when no rule does. A folder is
+ * given with a trailing slash, so a rule for the folder matches it. The
+ * distinction lets several rule files stack, each overriding the ones above.
+ */
+export function lastMatch(relativePath: string, rules: IgnoreRule[]): boolean | undefined {
   const normalized = relativePath.replace(/\\/g, '/');
-  let ignored = false;
+  let verdict: boolean | undefined;
   for (const rule of rules) {
-    if (matchesAny(normalized, [rule.glob])) ignored = !rule.negated;
+    if (matchesAny(normalized, [rule.glob])) verdict = !rule.negated;
   }
-  return ignored;
+  return verdict;
 }
 
 /**
@@ -93,7 +102,8 @@ function toGlob(pattern: string): string {
   let glob = pattern.replace(/\\/g, '/');
   const anchored = glob.startsWith('/');
   if (anchored) glob = glob.slice(1);
-  if (glob.endsWith('/')) glob += '**';
+  const folder = glob.endsWith('/');
+  if (folder) glob = glob.slice(0, -1);
   if (!anchored && !glob.includes('/')) glob = `**/${glob}`;
-  return glob;
+  return folder ? `${glob}/**` : glob;
 }

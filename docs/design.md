@@ -30,7 +30,8 @@ exists, changes that no hook saw are reached through the git comparison mode ins
 ### Agent hook integration (precise, carries intent)
 
 Tools that expose lifecycle hooks (Claude Code first) get a small hook script registered
-for two moments around every file edit/write the agent performs:
+for two moments around every file edit/write the agent performs, and after every shell
+command it runs:
 
 - **Before the tool runs**, the hook snapshots the file's current content into the
   workspace's `baselines/` folder under the data home — but only if no baseline exists
@@ -38,6 +39,9 @@ for two moments around every file edit/write the agent performs:
   closed, and never overwrites a baseline (that would erase unreviewed debt).
 - **After the tool runs**, the hook appends a JSON change event to the workspace's
   `events.jsonl` there.
+- **After a shell command**, the hook finds what the command wrote and records each file
+  the same way. A command names no file and can write through any program, so its writes
+  are known only by what they leave behind; see "Shell commands" below.
 
 Key properties:
 
@@ -94,6 +98,32 @@ Key properties:
   enabled the extension, so one user-wide entry never means recording everywhere. It finds
   the workspace by walking up from the agent's working directory to the nearest registered
   folder, so a session started in a subfolder still lands in the right store.
+- **Shell commands are covered by looking afterwards.** The agent reports how long the
+  command ran, so every workspace file whose modification time falls between the start of
+  that run, less two seconds of slack for filesystems that round times, and the moment the
+  hook runs is a candidate. Finding them is one walk of the workspace with a stat per
+  file. The walk never enters the repository's own store or installed dependencies, and
+  it reads the repository's ignore files, nested ones included, and the workspace's own
+  ignore file as plain patterns, so build output and caches are pruned without any
+  repository tooling having to be present. It costs a few tens of milliseconds on the
+  workspaces it was measured on. A modification time is not proof of a change, since
+  copies, checkouts and formatters stamp files they leave as they were, so each candidate
+  is held against what the review would compare it to: its baseline when it has one, and
+  otherwise the repository's copy when git can produce it, which then becomes the
+  baseline. Git is one source of baselines here, and the hook runs without it; then the
+  time is all there is, and the file is taken as new in full. A command's events carry no content,
+  since the command text says nothing reliable about what it wrote and the diff against
+  the baseline is what gets reviewed anyway; each event is keyed by the tool-use id and
+  the file, since one command changes many. Credentials files are never read on this path
+  either, so one that a command stamped is recorded as an occurrence only. Two limits are
+  accepted: a command that exits non-zero is reported through a different agent event the
+  hook is not registered for, so what it wrote before failing is seen only when something
+  else touches the file; and the editor's own save during a long command is attributed to
+  the command. Three other ways were weighed. A shadow copy of the workspace would give a
+  true before-state for every file, at the cost of a second copy of the checkout in the
+  user's home. Parsing the command text for the paths it writes to misses everything a
+  script or a tool writes. Tracing the command's system calls needs tracing tools that
+  exist on one platform and would rewrite the agent's command.
 - **One implementation of the shared rules.** The hook ships next to the extension's
   compiled core and requires it for where the data lives, how baselines are named and which
   files are sensitive. Earlier versions carried copies of those in the script, each marked
@@ -121,7 +151,9 @@ Mechanics of the store:
   this naming, so it exists once.
 - The *initial* baseline for a file is written by the capture hook just before the
   agent's first edit (see "Agent hook integration"). A brand-new file gets an empty
-  baseline, so its whole content is debt. Files without a baseline have no debt — the
+  baseline, so its whole content is debt. A file first seen after a shell command has no
+  before-state to snapshot: its baseline is the repository's copy when git can produce
+  one, and empty otherwise. Files without a baseline have no debt — the
   extension only ever asks for review of changes it saw an agent make.
 - The baseline advances when a review completes, when the user skips a file, or when an
   auto-skip glob matches a change event.
@@ -996,7 +1028,8 @@ tamper-evidence machinery, and keeps the extension out of surveillance territory
 
 - `src/` — extension source (TypeScript). `src/core/` holds editor-independent logic
   (diff, retype matching, the section model and its offset remapper, baseline store,
-  event-log parsing, git baseline reads, agent settings transforms) so it can be
+  event-log parsing, git baseline reads, the walk that finds a shell command's writes,
+  agent settings transforms) so it can be
   unit-tested with plain Node. `src/core/sections.ts` is the one that has to be right for
   the review to survive an editable buffer, which is why it is pure. `src/typingFx.ts`
   owns the retype overlay's animation, kept out of the controller so the review flow never
