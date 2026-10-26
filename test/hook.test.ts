@@ -47,7 +47,7 @@ function readEvents(root: string): any[] {
 
 function payload(
   cwd: string,
-  hookEvent: 'PreToolUse' | 'PostToolUse',
+  hookEvent: 'PreToolUse' | 'PostToolUse' | 'PostToolUseFailure',
   toolName: string,
   toolInput: Record<string, unknown>
 ) {
@@ -277,7 +277,7 @@ function age(file: string): void {
 
 function commandPayload(
   cwd: string,
-  hookEvent: 'PreToolUse' | 'PostToolUse',
+  hookEvent: 'PreToolUse' | 'PostToolUse' | 'PostToolUseFailure',
   durationMs = 1000,
   tool = 'Bash'
 ) {
@@ -286,6 +286,10 @@ function commandPayload(
     tool_response: { stdout: '', stderr: '', interrupted: false, isImage: false },
     duration_ms: durationMs,
   };
+}
+
+function startStamp(root: string): string {
+  return path.join(workspaceDir(root), 'commands', 'toolu_123');
 }
 
 /** Stamp a file as written `ms` ago. */
@@ -308,6 +312,70 @@ test('a long command records what it wrote early in its run', () => {
     readEvents(root).map((e) => e.file),
     [early]
   );
+});
+
+test('a command that fails still has what it wrote recorded', () => {
+  const root = enabledWorkspace();
+  const written = path.join(root, 'partial.ts');
+  fs.writeFileSync(written, 'half done\n');
+
+  runHook({
+    ...commandPayload(root, 'PostToolUseFailure'),
+    tool_response: undefined,
+    error: 'Exit code 1\nmake: *** [all] Error 2',
+  });
+  assert.deepEqual(
+    readEvents(root).map((e) => e.file),
+    [written]
+  );
+});
+
+test('without a reported duration, the window opens at the start noted before the run', () => {
+  const root = enabledWorkspace();
+  runHook(commandPayload(root, 'PreToolUse'));
+  assert.equal(fs.existsSync(startStamp(root)), true);
+  // Pretend the command has been running for half a minute.
+  fs.writeFileSync(startStamp(root), String(Date.now() - 30_000));
+  const early = path.join(root, 'early.ts');
+  fs.writeFileSync(early, 'early\n');
+  stampAgo(early, 20_000);
+  const before = path.join(root, 'before.ts');
+  fs.writeFileSync(before, 'before\n');
+  stampAgo(before, 40_000);
+
+  runHook({ ...commandPayload(root, 'PostToolUse'), duration_ms: undefined });
+  assert.deepEqual(
+    readEvents(root).map((e) => e.file),
+    [early]
+  );
+  assert.equal(fs.existsSync(startStamp(root)), false);
+});
+
+test('a start stamp left by a command that never reported back is cleared later', () => {
+  const root = enabledWorkspace();
+  const orphan = path.join(workspaceDir(root), 'commands', 'toolu_gone');
+  fs.mkdirSync(path.dirname(orphan), { recursive: true });
+  fs.writeFileSync(orphan, '0');
+  stampAgo(orphan, 2 * 24 * 60 * 60 * 1000);
+
+  runHook(commandPayload(root, 'PreToolUse'));
+  assert.equal(fs.existsSync(orphan), false);
+  assert.equal(fs.existsSync(startStamp(root)), true);
+});
+
+test('a file tool that fails records nothing', () => {
+  const root = enabledWorkspace();
+  const file = path.join(root, 'a.ts');
+  fs.writeFileSync(file, 'a\n');
+  runHook({
+    ...payload(root, 'PostToolUseFailure', 'Edit', {
+      file_path: file,
+      old_string: 'missing',
+      new_string: 'b',
+    }),
+    error: 'String to replace not found in file.',
+  });
+  assert.deepEqual(readEvents(root), []);
 });
 
 test('a PowerShell command is recorded like a Bash one', () => {

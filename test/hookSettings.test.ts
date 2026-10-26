@@ -141,7 +141,7 @@ test('describeHook reports where the hook sits and what it runs', () => {
   assert.deepEqual(describeHook(settings), { events: [] });
   addHook(settings, OURS);
   assert.deepEqual(describeHook(settings), {
-    events: ['PreToolUse', 'PostToolUse'],
+    events: ['PreToolUse', 'PostToolUse', 'PostToolUseFailure'],
     command: OURS,
   });
 });

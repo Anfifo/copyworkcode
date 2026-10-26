@@ -21,8 +21,12 @@ const HOOK_MARKER = 'copyworkcode-hook.js';
  */
 export const HOOK_MATCHER = 'Edit|Write|NotebookEdit|Bash|PowerShell';
 
-/** PreToolUse snapshots the pre-change baseline; PostToolUse records the event. */
-const HOOK_EVENTS = ['PreToolUse', 'PostToolUse'] as const;
+/**
+ * PreToolUse snapshots the pre-change baseline; PostToolUse records the event.
+ * A command that exits non-zero reports through PostToolUseFailure, and what it
+ * wrote before failing still needs recording.
+ */
+const HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'PostToolUseFailure'] as const;
 
 export type Settings = Record<string, unknown>;
 

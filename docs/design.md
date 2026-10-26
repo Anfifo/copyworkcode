@@ -30,7 +30,7 @@ exists, changes that no hook saw are reached through the git comparison mode ins
 ### Agent hook integration (precise, carries intent)
 
 Tools that expose lifecycle hooks (Claude Code first) get a small hook script registered
-for two moments around every file edit/write the agent performs, and after every shell
+for two moments around every file edit/write the agent performs, and around every shell
 command it runs:
 
 - **Before the tool runs**, the hook snapshots the file's current content into the
@@ -39,9 +39,10 @@ command it runs:
   closed, and never overwrites a baseline (that would erase unreviewed debt).
 - **After the tool runs**, the hook appends a JSON change event to the workspace's
   `events.jsonl` there.
-- **After a shell command**, the hook finds what the command wrote and records each file
-  the same way. A command names no file and can write through any program, so its writes
-  are known only by what they leave behind; see "Shell commands" below.
+- **After a shell command**, whether it succeeded or failed, the hook finds what the
+  command wrote and records each file the same way. A command names no file and can write
+  through any program, so its writes are known only by what they leave behind; see "Shell
+  commands" below. Both shells the agent offers, Bash and PowerShell, are covered.
 
 Key properties:
 
@@ -101,7 +102,13 @@ Key properties:
 - **Shell commands are covered by looking afterwards.** The agent reports how long the
   command ran, so every workspace file whose modification time falls between the start of
   that run, less two seconds of slack for filesystems that round times, and the moment the
-  hook runs is a candidate. Finding them is one walk of the workspace with a stat per
+  hook runs is a candidate. The report is optional in the agent's hook input, so the hook
+  also notes the time before each command runs, in a `commands/` folder in the workspace's
+  store keyed by tool-use id, and falls back to it. A cancelled command reports nothing
+  afterwards, so its note is left behind; notes older than a day are cleared the next time
+  a command starts. A command that exits non-zero reports through a separate event, and
+  the hook is registered for that one too, since a failing build or test run often writes
+  before it fails. Finding the candidates is one walk of the workspace with a stat per
   file. The walk never enters the repository's own store or installed dependencies, and
   it reads the repository's ignore files, nested ones included, and the workspace's own
   ignore file as plain patterns, so build output and caches are pruned without any
@@ -116,10 +123,9 @@ Key properties:
   the baseline is what gets reviewed anyway; each event is keyed by the tool-use id and
   the file, since one command changes many. Credentials files are never read on this path
   either, so one that a command stamped is recorded as an occurrence only. Two limits are
-  accepted: a command that exits non-zero is reported through a different agent event the
-  hook is not registered for, so what it wrote before failing is seen only when something
-  else touches the file; and the editor's own save during a long command is attributed to
-  the command. Three other ways were weighed. A shadow copy of the workspace would give a
+  accepted: a cancelled command fires no event afterwards, so what it wrote is seen only
+  when something else touches the file; and the editor's own save during a long command is
+  attributed to the command. Three other ways were weighed. A shadow copy of the workspace would give a
   true before-state for every file, at the cost of a second copy of the checkout in the
   user's home. Parsing the command text for the paths it writes to misses everything a
   script or a tool writes. Tracing the command's system calls needs tracing tools that

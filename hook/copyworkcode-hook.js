@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 
-// Claude Code hook installed for both PreToolUse and PostToolUse on the file
-// tools and on the shell. Receives the tool event as JSON on stdin.
+// Claude Code hook installed for PreToolUse, PostToolUse and
+// PostToolUseFailure on the file tools and on the shells. Receives the tool
+// event as JSON on stdin.
 //
 // File tools name the file they are about to change:
 // - PreToolUse: snapshot the file's current content as its baseline if none
@@ -14,7 +15,8 @@
 // program. Its writes are found afterwards: every workspace file whose
 // modification time falls within the command's run is a candidate, and each
 // one is checked against what the review would compare it to before it is
-// recorded (see recordCommandWrites). The baseline for a file first seen this
+// recorded (see recordCommandWrites). This runs whether the command succeeded
+// or failed. The baseline for a file first seen this
 // way comes from the repository when git can supply it, and is empty
 // otherwise, so the file reviews as new in full.
 //
@@ -38,7 +40,7 @@ const path = require('path');
 
 const core = (name) => require(path.join(__dirname, '..', 'out', 'core', name));
 const { registeredRootFor } = core('dataHome');
-const { eventsPath } = core('paths');
+const { commandsDir, eventsPath } = core('paths');
 const { baselineKey, readBaseline, seedBaseline } = core('baselineStore');
 const { isSensitivePath } = core('sensitive');
 const { hasDebt } = core('diff');
@@ -58,6 +60,11 @@ const MAX_REVIEWABLE_BYTES = 4 * 1024 * 1024;
 // How far before a command started a write may be stamped and still be taken
 // as the command's: filesystems round modification times, some to the second.
 const START_SLACK_MS = 2000;
+
+// A start stamp older than this belongs to a command that never reported back.
+const STALE_STAMP_MS = 24 * 60 * 60 * 1000;
+
+const COMMAND_ENDS = new Set(['PostToolUse', 'PostToolUseFailure']);
 
 function targetFile(input) {
   return input.file_path || input.notebook_path;
@@ -141,13 +148,48 @@ function recordFileTool(root, payload) {
   }
 }
 
+// The agent reports how long a command ran, but the field is optional. Its
+// start is noted before it runs so the window survives the field's absence.
+function startStampPath(root, payload) {
+  const id = String(payload.tool_use_id || '').replace(/[^A-Za-z0-9_-]/g, '');
+  return id ? path.join(commandsDir(root), id) : undefined;
+}
+
+function noteCommandStart(root, payload) {
+  const stamp = startStampPath(root, payload);
+  if (!stamp) return;
+  fs.mkdirSync(path.dirname(stamp), { recursive: true });
+  fs.writeFileSync(stamp, String(Date.now()));
+  // A cancelled command fires no later event, so its stamp is left behind.
+  const stale = Date.now() - STALE_STAMP_MS;
+  for (const name of fs.readdirSync(path.dirname(stamp))) {
+    const other = path.join(path.dirname(stamp), name);
+    if (fs.statSync(other).mtimeMs < stale) fs.rmSync(other, { force: true });
+  }
+}
+
+function commandStart(root, payload) {
+  const stamp = startStampPath(root, payload);
+  let noted;
+  if (stamp) {
+    try {
+      noted = Number(fs.readFileSync(stamp, 'utf8'));
+      fs.rmSync(stamp, { force: true });
+    } catch {
+      // Not noted: the hook was installed while the command ran.
+    }
+  }
+  const duration = Number(payload.duration_ms);
+  if (duration > 0) return Date.now() - duration;
+  return noted || Date.now();
+}
+
 // One event per file the command changed, with no content: the command's
 // text says nothing reliable about what it wrote, and the diff against the
 // baseline is what gets reviewed anyway. Events carry the tool-use id plus the
 // file, since one command can change many files.
 function recordCommandWrites(root, payload) {
-  const duration = Number(payload.duration_ms) || 0;
-  const since = Date.now() - duration - START_SLACK_MS;
+  const since = commandStart(root, payload) - START_SLACK_MS;
   for (const file of touchedSince(root, since)) {
     if (!changedContent(root, file)) continue;
     const id = payload.tool_use_id && `${payload.tool_use_id}:${baselineKey(root, file)}`;
@@ -197,8 +239,9 @@ function main(raw) {
   if (!root) return; // no enabled workspace here
 
   if (isShell) {
-    // Nothing to do before a command runs: there is no file to snapshot.
-    if (payload.hook_event_name === 'PostToolUse') recordCommandWrites(root, payload);
+    // A command that exits non-zero may still have written files first.
+    if (payload.hook_event_name === 'PreToolUse') noteCommandStart(root, payload);
+    else if (COMMAND_ENDS.has(payload.hook_event_name)) recordCommandWrites(root, payload);
   } else {
     recordFileTool(root, payload);
   }

@@ -45,10 +45,6 @@ promoted here when they're deemed worth building.
       - Without git, a file a command stamped but left as it was is taken as new in full,
         since nothing is there to compare against. Whether that happens often enough to
         want a lighter answer, or whether every project that hits it has git anyway.
-      - A command that exits non-zero reports through a separate event the hook is not
-        registered for, so what it wrote before failing goes unseen until the next command
-        or edit touches the same file. Whether that is worth a third event in the settings
-        entry.
       - The walk's cost on the largest workspace in use. It is under 40 ms on the ones it
         was measured on.
 - [ ] **Per-project override for content exclusion** — the exclusion patterns are fixed;

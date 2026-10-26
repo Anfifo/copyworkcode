@@ -10,6 +10,7 @@ import { workspaceDir } from './dataHome';
 export const EVENTS_FILE = 'events.jsonl';
 const STATE_FILE = 'state.json';
 const BASELINES_DIR = 'baselines';
+const COMMANDS_DIR = 'commands';
 
 export function dataDir(root: string): string {
   return workspaceDir(root);
@@ -25,4 +26,9 @@ export function statePath(root: string): string {
 
 export function baselinesDir(root: string): string {
   return path.join(dataDir(root), BASELINES_DIR);
+}
+
+/** When each running shell command started, one file per tool-use id. */
+export function commandsDir(root: string): string {
+  return path.join(dataDir(root), COMMANDS_DIR);
 }

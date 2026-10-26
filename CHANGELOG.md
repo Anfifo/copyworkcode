@@ -8,11 +8,11 @@ Notable changes to CopyWorkCode. Versions follow [semantic versioning](https://s
   capture did not see, and hides the link while git has nothing, so it never leads to another
   empty view.
 
-- Agent capture records the files a shell command writes. They are found by their
-  modification time once the command returns, and a file seen for the first time this way
-  starts from its committed content, or as wholly new when the project has no git. Turning
-  capture on again, or the reconcile on activation, widens an already installed hook entry
-  to the shell tool.
+- Agent capture records the files a shell command writes, in Bash or PowerShell, including
+  a command that fails. They are found by their modification time once the command returns,
+  and a file seen for the first time this way starts from its committed content, or as
+  wholly new when the project has no git. Turning capture on again, or the reconcile on
+  activation, widens an already installed hook to the shells and to the failure event.
 
 - **Put Reviewed Files Back in the Queue** undoes reviews that emptied the git queue. It lists
   every file the compared revision still reports that a review is hiding, all pre-selected, and
