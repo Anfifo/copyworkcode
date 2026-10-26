@@ -248,7 +248,10 @@ It is an override, and a reversible one:
   stays the default and a workspace setting is never written into the project. The
   picker's first entry returns to the setting, and the header carries the picked hash for
   as long as it is in force. The same welcome offers the way back to the tracked queue only
-  while that queue has rows, so its link never lands on another empty view.
+  while that queue has rows, so its link never lands on another empty view. The empty
+  tracked welcome does the same in the other direction: it offers the switch to git only
+  while git reports something, which is how changes no capture saw are reached from the
+  view that comes up empty for them.
 - **A review can be taken back.** The rule above is also how a queue vanishes by mistake:
   marking a batch reviewed clears every row at once, and git will not raise them again until
   the change is committed. The set is exactly recoverable — what the revision reports, minus

@@ -65,9 +65,17 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
     this.rows = new Map(rows.map((row) => [row.file, row]));
     this.ambiguous = duplicateNames(rows.map((row) => row.file));
     this.updateHeader(rows.length);
+    // An empty welcome offers a link only while it leads somewhere, so each
+    // mode asks the other for its rows before offering the way across.
+    if (this.source.mode === 'tracked' && rows.length === 0) {
+      void vscode.commands.executeCommand(
+        'setContext',
+        'copyworkcode.gitDebt',
+        this.source.rows('git').length > 0
+      );
+    }
     if (this.source.mode === 'git' && rows.length === 0) {
-      // The empty git welcome offers a link only while it leads somewhere:
-      // the tracked queue while that queue has rows, and the requeue picker
+      // The tracked queue while that queue has rows, and the requeue picker
       // while a review is hiding a change the revision still reports.
       void vscode.commands.executeCommand(
         'setContext',

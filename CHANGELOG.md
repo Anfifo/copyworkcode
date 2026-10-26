@@ -4,6 +4,10 @@ Notable changes to CopyWorkCode. Versions follow [semantic versioning](https://s
 
 ## [Unreleased]
 
+- The empty tracked queue offers **Compare Against Git** while git reports changes that
+  capture did not see, and hides the link while git has nothing, so it never leads to another
+  empty view.
+
 - **Put Reviewed Files Back in the Queue** undoes reviews that emptied the git queue. It lists
   every file the compared revision still reports that a review is hiding, all pre-selected, and
   forgets the review of each one you keep checked. The empty git welcome offers it while

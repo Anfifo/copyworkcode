@@ -237,12 +237,22 @@
       {
         "view": "copyworkcode.debt",
         "contents": "Nothing captured yet — no changes have been recorded for this workspace.\nCompare against git to review changes made before capture was on, or turn on capture to collect them from now on.\n[Compare Against Git](command:copyworkcode.useGitBaseline)\n[Turn On Agent Capture](command:copyworkcode.installAgentHook)",
-        "when": "copyworkcode.enabled && copyworkcode.debtMode != git && !config.copyworkcode.agentCapture"
+        "when": "copyworkcode.enabled && copyworkcode.debtMode != git && !config.copyworkcode.agentCapture && copyworkcode.gitDebt"
+      },
+      {
+        "view": "copyworkcode.debt",
+        "contents": "Nothing captured yet — no changes have been recorded for this workspace.\nTurn on capture to collect them from now on.\n[Turn On Agent Capture](command:copyworkcode.installAgentHook)",
+        "when": "copyworkcode.enabled && copyworkcode.debtMode != git && !config.copyworkcode.agentCapture && !copyworkcode.gitDebt"
+      },
+      {
+        "view": "copyworkcode.debt",
+        "contents": "Nothing captured is waiting for review.\nGit reports changes that capture did not see. You can review those against the compared revision.\n[Compare Against Git](command:copyworkcode.useGitBaseline)",
+        "when": "copyworkcode.enabled && copyworkcode.debtMode != git && config.copyworkcode.agentCapture && copyworkcode.gitDebt"
       },
       {
         "view": "copyworkcode.debt",
         "contents": "All clear — no changes waiting for review.",
-        "when": "copyworkcode.enabled && copyworkcode.debtMode != git && config.copyworkcode.agentCapture"
+        "when": "copyworkcode.enabled && copyworkcode.debtMode != git && config.copyworkcode.agentCapture && !copyworkcode.gitDebt"
       },
       {
         "view": "copyworkcode.debt",
