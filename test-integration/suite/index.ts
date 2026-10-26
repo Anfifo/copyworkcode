@@ -6,6 +6,7 @@ import { countLines } from '../../src/core/diff';
 import { baselinesDir, statePath } from '../../src/core/paths';
 import { badgeLabel, removalHover, removalRanges } from '../../src/removalMark';
 import { removedUri } from '../../src/retypeController';
+import { inspectFlagServer, syncFlagServer, userConfigFile } from '../../src/flagServerInstaller';
 
 /**
  * End-to-end checks inside a live extension host. A review is armed by default,
@@ -951,6 +952,62 @@ export async function run(): Promise<void> {
   );
   assert.equal(deletionRecord?.hunksConfirmed, 1, 'the deletion is confirmed');
   assert.equal(deletionRecord?.hunksTyped, 1, 'and the addition is typed');
+
+  // --- The flag tool's server goes through the agent's command line ---------
+  // The runner points the agent's config folder at one of its own. Refusing to
+  // run without it keeps this from ever registering anything in the real one.
+  const agentConfig = process.env.CLAUDE_CONFIG_DIR;
+  assert.ok(agentConfig, 'the runner isolates the agent config');
+  assert.equal(path.dirname(userConfigFile()), agentConfig);
+  const context = {
+    asAbsolutePath: (relative: string) => path.join(ext.extensionPath, relative),
+  } as vscode.ExtensionContext;
+  const registered = await syncFlagServer(context, true);
+  if (registered === 'no-cli') {
+    // No command line here, as on CI: nothing is written by any other route.
+    assert.equal(fs.existsSync(userConfigFile()), false, 'the config is never written directly');
+  } else {
+    assert.equal(registered, 'installed');
+    assert.equal(inspectFlagServer(context).entry.current, true, 'registered from this install');
+    assert.equal(await syncFlagServer(context, true), 'unchanged', 'a second sync runs nothing');
+    assert.equal(await syncFlagServer(context, false), 'removed');
+    assert.equal(inspectFlagServer(context).entry.registered, false, 'and removed again');
+  }
+
+  // --- A flagged section leads the walk and carries its reason --------------
+  const flagged = await review('flagged.ts');
+  await settle();
+  const flaggedCaret = () => flagged.offsetAt(editorOf('flagged.ts').selection.active);
+  assert.equal(
+    flaggedCaret(),
+    flagged.getText().indexOf('NEW2'),
+    'the review opens on the flagged section, ahead of the one before it'
+  );
+  const lenses =
+    (await vscode.commands.executeCommand<vscode.CodeLens[]>(
+      'vscode.executeCodeLensProvider',
+      flagged.uri
+    )) ?? [];
+  assert.ok(
+    lenses.some(
+      (lens) =>
+        lens.command?.title === 'Flagged by the agent, must type: the second change matters'
+    ),
+    'the strip leads with the reason the agent gave'
+  );
+  await exec('copyworkcode.skipSection');
+  await settle(150);
+  assert.equal(
+    flaggedCaret(),
+    flagged.getText().indexOf('NEW1'),
+    'once the flagged section is done the walk goes on to the rest'
+  );
+  await exec('copyworkcode.skipSection');
+  await settle();
+  assert.ok(
+    reviews().some((entry) => entry.file === file('flagged.ts')),
+    'a flagged file reviews like any other'
+  );
 
   // Typing must be back to normal once no review is active. Typed into a file
   // that stayed outside every review, so this cannot pass or fail on whatever

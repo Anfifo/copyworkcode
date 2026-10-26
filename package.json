@@ -594,7 +594,7 @@
           "type": "boolean",
           "default": false,
           "scope": "application",
-          "description": "Record edits made by Claude Code, so changed files appear in the review queue automatically. Turning this on adds one hook entry to ~/.claude/settings.json; turning it off removes that entry again. The hook only records in workspaces where CopyWorkCode is enabled, and nothing is sent anywhere. Applies to every workspace, because the file it edits is shared by all of them."
+          "description": "Record edits made by Claude Code, so changed files appear in the review queue automatically. Turning this on adds one hook entry to ~/.claude/settings.json; turning it off removes that entry again. It also registers the flag tool, a small MCP server that lets Claude point at the parts of its change most worth typing, through Claude Code's own claude mcp command; turning capture off removes it the same way. The hook and the tool only act in workspaces where CopyWorkCode is enabled, and nothing is sent anywhere. Applies to every workspace, because the files involved are shared by all of them."
         },
         "copyworkcode.startEditing": {
           "type": "boolean",

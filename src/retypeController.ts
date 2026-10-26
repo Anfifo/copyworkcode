@@ -20,6 +20,8 @@ import {
   typedBoundary,
 } from './core/sections';
 import { DebtSource } from './debtSource';
+import { FlagStore } from './flagStore';
+import { PlacedFlag, flagFor, nextFlagged } from './core/flags';
 import {
   Removal,
   RemovalMarks,
@@ -98,6 +100,10 @@ interface Session {
   /** True while the reviewer has editing enabled: guidance stands down, the
    * read-only flag is lifted, and the file is an ordinary editor. */
   editing: boolean;
+  /** The agent's flags placed in the buffer, for the version they were placed
+   * against. Placing searches the whole text, so it waits for the buffer to
+   * change rather than running per keystroke. */
+  placed?: { version: number; flags: PlacedFlag[] };
 }
 
 /** Where the cursor is in relation to the review, resolved per keystroke. */
@@ -279,6 +285,7 @@ export class RetypeController implements vscode.Disposable {
   private focusGuard: vscode.Disposable;
   private selectionGuard: vscode.Disposable;
   private visibilityGuard: vscode.Disposable;
+  private flagGuard: vscode.Disposable;
   /** Last value pushed for each context key, so cursor movement doesn't
    * re-issue a setContext per key on every event. */
   private contexts = new Map<string, boolean>();
@@ -295,8 +302,17 @@ export class RetypeController implements vscode.Disposable {
 
   constructor(
     private log: ReviewLog,
-    private source: DebtSource
+    private source: DebtSource,
+    private flags: FlagStore
   ) {
+    // A flag arriving mid-review marks its section and reorders the walk from
+    // the next section on; the one being typed stays where it is.
+    this.flagGuard = flags.onDidChange(() => {
+      for (const s of [this.session, ...this.parked.values()]) {
+        if (s) s.placed = undefined;
+      }
+      this.updateUi();
+    });
     // Every content change is reconciled, never fatal: the reviewer's own
     // typing, a formatter, an agent writing the file again, an undo. The
     // section set is moved to match the new offsets and the review continues.
@@ -355,6 +371,21 @@ export class RetypeController implements vscode.Disposable {
 
   get reviewing(): boolean {
     return this.session !== undefined;
+  }
+
+  /** The agent's flags in the buffer as it is now. */
+  private placedFlags(s: Session): PlacedFlag[] {
+    const version = s.document.version;
+    if (s.placed?.version !== version) {
+      s.placed = { version, flags: this.flags.placedFor(s.file, s.document.getText()) };
+    }
+    return s.placed.flags;
+  }
+
+  /** Where the walk goes next: flagged sections first, then the rest in order. */
+  private nextOwed(s: Session, offset = 0): Section | undefined {
+    const flagged = nextFlagged(s.sections, this.placedFlags(s), offset);
+    return flagged ?? nextUnclaimed(s.sections, offset);
   }
 
   async start(root: string, file: string, handover?: PageHandover): Promise<void> {
@@ -623,7 +654,7 @@ export class RetypeController implements vscode.Disposable {
     // A handover is aimed at one region, and `adopt` puts the caret there once
     // the editor is handed over; until then the review points at the first
     // thing still owed, as any other review does.
-    const first = nextUnclaimed(sections);
+    const first = this.nextOwed(this.session);
     if (first) {
       this.session.active = first;
       this.moveCursorTo(first.start, vscode.TextEditorRevealType.InCenter);
@@ -838,7 +869,7 @@ export class RetypeController implements vscode.Disposable {
       }
       await this.arm(s);
       this.syncTypeOverride();
-      const section = this.activeSection() ?? nextUnclaimed(s.sections);
+      const section = this.activeSection() ?? this.nextOwed(s);
       if (section) {
         s.active = section;
         this.moveCursorTo(typedBoundary(section));
@@ -1008,7 +1039,7 @@ export class RetypeController implements vscode.Disposable {
     const s = this.session;
     if (!s) return;
     section.outcome = outcome;
-    const next = nextUnclaimed(s.sections, section.end);
+    const next = this.nextOwed(s, section.end);
     if (!next) {
       await this.finish();
       return;
@@ -1026,7 +1057,7 @@ export class RetypeController implements vscode.Disposable {
     const s = this.session;
     if (!s) return;
     await vscode.window.showTextDocument(s.document, { preview: false });
-    const target = this.activeSection() ?? nextUnclaimed(s.sections);
+    const target = this.activeSection() ?? this.nextOwed(s);
     if (!target) {
       this.updateUi();
       return;
@@ -1255,7 +1286,7 @@ export class RetypeController implements vscode.Disposable {
       }
       if (!s.editing) await this.arm(s);
       this.syncTypeOverride();
-      const first = nextUnclaimed(s.sections);
+      const first = this.nextOwed(s);
       if (first) {
         s.active = first;
         this.moveCursorTo(first.start, vscode.TextEditorRevealType.InCenter);
@@ -1529,7 +1560,7 @@ export class RetypeController implements vscode.Disposable {
       return false;
     }
     if (note) this.note(note);
-    const first = nextUnclaimed(s.sections);
+    const first = this.nextOwed(s);
     if (first) s.active = first;
     if (this.session === s) this.updateUi();
     else this.emitter.fire();
@@ -1711,6 +1742,7 @@ export class RetypeController implements vscode.Disposable {
       ) => new vscode.CodeLens(range, { title, command, tooltip, arguments: args });
     };
 
+    const placed = this.placedFlags(s);
     const lenses: vscode.CodeLens[] = [];
     for (const section of s.sections) {
       if (isClaimed(section)) continue;
@@ -1722,19 +1754,25 @@ export class RetypeController implements vscode.Disposable {
         section.removedLines.length > 0
           ? ` · replaces ${lineCount(section.removedLines.length)}`
           : '';
+      const flag = flagFor(section, placed);
       if (section !== active) {
         lenses.push(
           lens(
-            section.kind === 'confirm'
-              ? `${deletedLines(section.removedLines.length)} here — review this`
-              : `Not reviewed yet — start here${replaces}`,
+            flag
+              ? `${flagTitle(flag)} — start here`
+              : section.kind === 'confirm'
+                ? `${deletedLines(section.removedLines.length)} here — review this`
+                : `Not reviewed yet — start here${replaces}`,
             'copyworkcode.focusSection',
-            'Put the cursor at this section and start typing it',
+            flag ? flagTooltip(flag) : 'Put the cursor at this section and start typing it',
             [section.start]
           )
         );
         continue;
       }
+      // The reason leads the strip, ahead of the controls: it is what the
+      // reviewer reads before deciding how closely to go through the section.
+      if (flag) lenses.push(lens(flagTitle(flag), '', flagTooltip(flag)));
       const where = `${claimed}/${total} claimed`;
       const diffLens = lens(
         'Show diff',
@@ -1847,6 +1885,9 @@ export class RetypeController implements vscode.Disposable {
     const key = [
       claimed,
       s.sections.length,
+      this.placedFlags(s)
+        .map((f) => `${f.start}.${f.end}.${f.importance}`)
+        .join(','),
       s.editing,
       active ? s.sections.indexOf(active) : -1,
       active?.position ?? -1,
@@ -1985,6 +2026,7 @@ export class RetypeController implements vscode.Disposable {
     this.focusGuard.dispose();
     this.selectionGuard.dispose();
     this.visibilityGuard.dispose();
+    this.flagGuard.dispose();
     this.typeOverride?.dispose();
     this.fx.dispose();
     this.pending.dispose();
@@ -2000,6 +2042,25 @@ export class RetypeController implements vscode.Disposable {
     this.emitter.dispose();
     this.startEmitter.dispose();
   }
+}
+
+/** A lens is one line, so a long reason is cut there and shown whole on hover. */
+const FLAG_REASON_CHARS = 70;
+
+function flagTitle(flag: PlacedFlag): string {
+  const label = flag.importance === 'must-type' ? 'must type' : 'worth typing';
+  const reason =
+    flag.reason.length > FLAG_REASON_CHARS
+      ? `${flag.reason.slice(0, FLAG_REASON_CHARS - 1).trimEnd()}…`
+      : flag.reason;
+  return `Flagged by the agent, ${label}: ${reason}`;
+}
+
+function flagTooltip(flag: PlacedFlag): string {
+  const lines = [flag.reason];
+  if (flag.intent) lines.push(`Intent: ${flag.intent}`);
+  lines.push('The agent flagged this part of its change. Everything else is still reviewed.');
+  return lines.join('\n\n');
 }
 
 /** Whether a review opens with editing enabled. */

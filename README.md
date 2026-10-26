@@ -50,8 +50,21 @@ empty otherwise, so the whole file is up for review.
 
 Capture works by adding one entry to `~/.claude/settings.json`. It is the only file the
 extension edits that it does not own, it is touched only when you turn capture on, and
-`Turn Off Agent Capture` removes the entry again. `Check Agent Hook Configuration`, in the
-panel's menu, shows the current state of that entry and can repair or remove it.
+`Turn Off Agent Capture` removes the entry again. Capture also registers the flag tool
+below with Claude Code. That registration goes through Claude Code's own `claude mcp`
+command, so Claude Code writes its own config, and turning capture off removes it the same
+way. `Check Agent Hook Configuration`, in the panel's menu, shows the state of both and can
+repair or remove them.
+
+### Flagged sections
+
+With capture on, Claude gets one tool, `flag_for_review`, in workspaces where CopyWorkCode
+is enabled. After an edit it can point at the parts of its change most worth typing, with a
+reason and the intent behind them. A flagged section shows the reason above it in the
+review, the review leads with flagged sections, and the queue counts them. Flags only add
+emphasis: everything Claude changed is still up for review, and no flag can skip a section.
+If the `claude` command cannot be found, turning capture on gives you the line to register
+the tool by hand.
 
 Files that hold credentials, keys or environment variables are never snapshotted or queued.
 

@@ -136,6 +136,64 @@ Key properties:
   "keep in sync"; a hash in the path layout was the point at which a third copy would have
   been one too many.
 
+### Flagged sections (the agent's own emphasis)
+
+The hook records what the agent changed; it cannot say which parts of a change matter. The
+agent can, so capture also gives it one tool, `flag_for_review`, served by a small MCP
+server that ships with the extension (`mcp/copyworkcode-mcp.js`). After an edit the agent
+calls it with an excerpt of what it wrote, `must-type` or `worth-typing`, a one-sentence
+reason and, optionally, the intent behind that part. Each call is one line in the
+workspace's `flags.jsonl`.
+
+- **Flags only add.** A flagged section shows the reason in its strip, ahead of the
+  controls, and an unreached one says so in its "start here" lens; the walk leads with
+  unclaimed must-type sections, then worth-typing ones, then the rest in order; the queue
+  row counts the flags and lists their reasons in its tooltip. Nothing a flag says makes a
+  section optional or changes how it is recorded. The author of a change choosing what its
+  reviewer reads is the over-trust the review exists to counter, so the agent gets to raise
+  emphasis and never to lower it.
+- **Anchored by text.** Offsets go stale the moment the file is edited again, so a flag is
+  found by its excerpt. The server refuses an excerpt that is not in the file as it is now,
+  or occurs more than once, with a message the agent can act on, so every recorded flag
+  pointed at one place when it was made. The review places it afresh against the current
+  buffer, picking the repeat nearest the recorded offset if later edits duplicated the
+  text, and a flag whose excerpt is gone is dropped. A section carries the flag that
+  overlaps it, must-type over worth-typing, newest first; a deletion carries one on the
+  line it sits at. Excerpts are matched in the file's own line endings, since the agent
+  quotes with plain newlines.
+- **A flag lasts one round of review.** It counts while it is newer than the file's
+  baseline. Finishing a review writes the baseline, so the flags about the version just
+  reviewed stop counting even when their text is still in the file.
+- **Offered only where invited.** The server answers in every project, since it is
+  registered at user scope for the same reason the hook is, but it lists the tool and
+  sends its instructions only when the agent's project folder is an enabled workspace.
+  Anywhere else a session carries neither. The instructions travel with the server, which
+  is how the agent learns to use the tool without anything added to the user's own agent
+  instructions. A real session confirmed that this is enough: given a small change to an
+  access check and no mention of the tool, the agent flagged exactly the lines of the
+  check as must-type, with a reason and an intent.
+- **Registered by the agent's own command line.** A server the agent loads in every
+  project can only live in its user config, `~/.claude.json`; its settings file takes no
+  server definitions. That config is not a quiet file: the agent keeps it in memory and
+  saves over it as it runs, so a write from the extension could race one of those saves
+  and lose either side. The extension therefore never writes it. It runs `claude mcp
+  add-json` and `claude mcp remove` at user scope, then reads the file to confirm the
+  change took. The command line is looked for on the PATH, then inside the agent's editor
+  extension, which ships its own copy. Without either, nothing is written by any other
+  route: turning capture on says so with the line to run by hand, and the check command
+  offers to copy it. A plugin would own its own config, at the cost of moving the on/off
+  switch out of the extension (see brainstorm.md).
+- **The same switch as the hook.** `copyworkcode.agentCapture` drives both, through the
+  same reconcile: on activation and on every change. With capture off, activation leaves
+  the agent's config unread, so a default install never opens it; the server entry is
+  removed when the setting turns off, on a reset, and from the check command. An entry
+  under the server's name that runs some other script is not ours and is left alone. The
+  reconcile runs one at a time, since the command line takes a moment and two runs would
+  race each other's changes.
+- **The agent's text stays text.** Reasons and intents are the agent's words, so the
+  queue's tooltip escapes them before they become Markdown, and a lens cuts a long reason
+  at one line and shows it whole on hover.
+
 ## Unit of review: net diff vs. baseline
 
 Individual events go stale fast: by the time review happens, the agent may have rewritten
@@ -180,7 +238,8 @@ Consequences:
 
 ### Where the data lives
 
-Everything the extension keeps — baselines, the event log, the review log — lives under
+Everything the extension keeps — baselines, the event log, the agent's flags, the review
+log, and the start times of shell commands still running — lives under
 `~/.copyworkcode/workspaces/<key>/`, one folder per workspace, and nowhere inside the
 workspace itself. `COPYWORKCODE_HOME` relocates the whole tree. The unit suite sets it once,
 in a file loaded before any test, so a test that reaches the store lands in a temporary
@@ -1035,7 +1094,8 @@ tamper-evidence machinery, and keeps the extension out of surveillance territory
 - `src/` — extension source (TypeScript). `src/core/` holds editor-independent logic
   (diff, retype matching, the section model and its offset remapper, baseline store,
   event-log parsing, git baseline reads, the walk that finds a shell command's writes,
-  agent settings transforms) so it can be
+  agent settings transforms, where a flag's excerpt lands and what the agent's config says
+  about the flag server) so it can be
   unit-tested with plain Node. `src/core/sections.ts` is the one that has to be right for
   the review to survive an editable buffer, which is why it is pure. `src/typingFx.ts`
   owns the retype overlay's animation, kept out of the controller so the review flow never
@@ -1060,6 +1120,12 @@ tamper-evidence machinery, and keeps the extension out of surveillance territory
   colour, spacing and geometry stay eye-only, and the helper models none of them on purpose so
   nothing can be claimed about them by accident.
 - `hook/` — standalone hook script installed into agent tooling (plain Node, no deps).
+- `mcp/` — the flag tool's MCP server, standalone in the same way. Like the hook, it
+  requires the compiled core for the shared rules, here including how an excerpt is
+  matched (`src/core/flags.ts`), so the server that checks an excerpt and the review that
+  finds it again agree on what the same text is. It is tested end to end the same way, by
+  spawning it and talking JSON-RPC over its stdin; the integration suite runs the
+  registration through the agent's command line against a config folder of its own.
 - `test/` — unit tests (`npm test`, Node's built-in runner). The hook script is tested
   end-to-end by spawning it as a subprocess with realistic payloads; installing and
   removing it are tested as pure transforms over a settings object, including the cases

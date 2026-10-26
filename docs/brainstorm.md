@@ -93,7 +93,9 @@ installed from inside the agent.
 - **Downside:** the extension's setting stops being the one switch, since the plugin is
   installed and removed from the agent. The hook loads the extension's compiled core for
   the shared rules, and a plugin lives at a different path.
-- **Status:** revisit once the flag tool's server has to be registered somewhere.
+- **Status:** the flag tool's server is registered through the agent's command line, on the
+  extension's own switch (design.md). Revisit if that proves fragile, or if the agent's
+  config stops being reachable that way.
 
 ### Review debt shown inside the agent
 

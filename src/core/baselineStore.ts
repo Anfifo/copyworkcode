@@ -89,6 +89,21 @@ export function seedBaseline(root: string, file: string, content: string): boole
   }
 }
 
+/**
+ * When the baseline was last written: seeded before the agent's first edit, or
+ * advanced by a review. Anything said about the file's changes before then
+ * belongs to an earlier round of review.
+ */
+export function baselineWrittenAt(root: string, file: string): number | undefined {
+  const p = baselinePath(root, file);
+  if (!p) return undefined;
+  try {
+    return fs.statSync(p).mtimeMs;
+  } catch {
+    return undefined;
+  }
+}
+
 /** All workspace files that currently have a baseline snapshot. */
 export function trackedFiles(root: string): string[] {
   let keys: string[];

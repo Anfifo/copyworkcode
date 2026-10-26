@@ -4,6 +4,13 @@ Notable changes to CopyWorkCode. Versions follow [semantic versioning](https://s
 
 ## [Unreleased]
 
+- Claude can flag the parts of its change most worth typing. Turning agent capture on also
+  registers a small MCP server with Claude Code, through Claude Code's own `claude mcp`
+  command, that gives Claude a `flag_for_review` tool in enabled workspaces. A flagged
+  section shows Claude's reason above it, the review leads with flagged sections, and the
+  queue counts them. Flags only ever add emphasis. Check Agent Hook Configuration reports
+  the server alongside the hook.
+
 - The empty tracked queue offers **Compare Against Git** while git reports changes that
   capture did not see, and hides the link while git has nothing, so it never leads to another
   empty view.

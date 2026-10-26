@@ -56,25 +56,21 @@ promoted here when they're deemed worth building.
       deleted. The transcript's format is internal to the agent and changes between
       versions, so the reader has to fail soft. Flagged sections (below) carry their intent
       directly; this covers every edit the agent did not flag.
-- [ ] **Agent-flagged sections** — a local MCP server shipped with the extension gives the
-      agent one tool to call after it edits: flag a stretch of the change as must-type or
-      worth typing, with a reason and the intent behind it. The anchor is a snippet of the
-      edited text, resolved to a range when the call arrives and carried forward like any
-      section's progress. Flags only add to a review. A flagged section is required and
-      sorts first, and nothing the agent says can make a section optional: the author
-      choosing what its reviewer reads is the over-trust the product exists to counter. An
-      opt-in mode requires only the flagged sections and records the rest as skipped. Stats
-      keep typed-flagged and typed-unflagged apart, so it shows over time whether the flags
-      point at what mattered. The server's own instructions tell the agent to use the tool,
-      so the user's agent instructions stay untouched. Open before building:
-      - Where the server is registered. The user-scope MCP list lives in the agent's own
-        config file, which the agent rewrites constantly; a plugin owns its config but takes
-        the on/off switch out of the extension (see brainstorm.md).
-      - Where a reason shows during review: the section's hover, the review strip, the
-        change set page.
-      - Whether an end-of-turn hook should hold the agent back when it edited files and
-        flagged nothing. It makes flagging reliable and costs a model turn each time, so it
-        would be off by default.
+- [ ] **Dogfood agent flags.** The tool, where its flags show in a review and how it is
+      registered are built and tested; the mechanism is in design.md. What only use can show:
+      - Whether the agent flags the parts that matter, and how many. One test session
+        flagged one block, the right one. Flags on everything would turn the queue badge
+        into noise.
+      - Whether the strip's leading lens is enough, or a flagged section wants its own
+        colour in the editor.
+      - Whether leading the walk with flagged sections helps, or jumping out of reading
+        order loses the thread of the file.
+- [ ] **The rest of the flag plan.** An opt-in mode that requires only the flagged sections
+      and records the rest as skipped; stats that keep typed-flagged and typed-unflagged
+      apart, so it shows over time whether the flags point at what mattered; reasons on the
+      change set page. An end-of-turn hook that holds the agent back when it edited files
+      and flagged nothing stays undecided: it makes flagging reliable and costs a model turn
+      each time, so it waits until dogfooding shows whether the agent forgets.
 - [ ] **Heuristic detection layer** — tool-agnostic fallback for assistants without hooks,
       a whole file pasted from a chat window, or a program writing to disk outside any
       agent's shell. Large

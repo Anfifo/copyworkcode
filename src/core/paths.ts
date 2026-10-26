@@ -8,6 +8,7 @@ import { workspaceDir } from './dataHome';
  * every name here from one place.
  */
 export const EVENTS_FILE = 'events.jsonl';
+export const FLAGS_FILE = 'flags.jsonl';
 const STATE_FILE = 'state.json';
 const BASELINES_DIR = 'baselines';
 const COMMANDS_DIR = 'commands';
@@ -18,6 +19,11 @@ export function dataDir(root: string): string {
 
 export function eventsPath(root: string): string {
   return path.join(dataDir(root), EVENTS_FILE);
+}
+
+/** Sections the agent asked the reviewer to type, one JSON line each. */
+export function flagsPath(root: string): string {
+  return path.join(dataDir(root), FLAGS_FILE);
 }
 
 export function statePath(root: string): string {

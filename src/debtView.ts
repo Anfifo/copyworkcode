@@ -1,7 +1,10 @@
+import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { DebtRow, DebtSource } from './debtSource';
 import { EventQueue } from './eventQueue';
+import { FlagStore } from './flagStore';
+import { PlacedFlag } from './core/flags';
 import { ReviewLog } from './reviewState';
 
 /**
@@ -46,6 +49,7 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
     private source: DebtSource,
     private queue: EventQueue,
     private log: ReviewLog,
+    private flags: FlagStore,
     private progressFor: (file: string) => RowProgress | undefined,
     private decorations?: DebtDecorations
   ) {}
@@ -100,6 +104,7 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
     const removed = row?.removedLines ?? 0;
     const events = this.queue.eventsFor(file, this.log.lastFor(file)?.at).length;
     const progress = this.progressFor(file);
+    const flags = this.placedFlags(file);
 
     const item = new vscode.TreeItem(path.basename(file));
     item.resourceUri = vscode.Uri.file(file);
@@ -110,6 +115,7 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
     // description is read at a glance down a column of rows in a panel usually
     // docked narrow, so each thing on it costs the others their room.
     const bits = [`+${added} −${removed}`];
+    if (flags.length > 0) bits.push(`${flags.length} flagged`);
     if (progress) {
       // Two of the three states are already the word the row wants.
       const where = progress.state === 'page' ? 'on the page' : progress.state;
@@ -123,7 +129,7 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
     if (dir) bits.push(dir);
     item.description = bits.join(' · ');
 
-    item.tooltip = this.tooltip(file, added, removed, events, progress, row);
+    item.tooltip = this.tooltip(file, added, removed, events, progress, row, flags);
     // A row with an editor review on it, running or paused, answers to one
     // action the others cannot: there is no progress to reset on a file whose
     // review hasn't started. Reset belongs to that surface — it puts the file
@@ -141,13 +147,25 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
     return item;
   }
 
+  /** The flags still pointing at something in the file as it is on disk. The
+   * file is read only when it has flags at all. */
+  private placedFlags(file: string): PlacedFlag[] {
+    if (this.flags.flagsFor(file).length === 0) return [];
+    try {
+      return this.flags.placedFor(file, fs.readFileSync(file, 'utf8'));
+    } catch {
+      return [];
+    }
+  }
+
   private tooltip(
     file: string,
     added: number,
     removed: number,
     events: number,
     progress: RowProgress | undefined,
-    row: DebtRow | undefined
+    row: DebtRow | undefined,
+    flags: PlacedFlag[]
   ): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
     md.supportThemeIcons = true;
@@ -173,6 +191,14 @@ export class DebtTreeProvider implements vscode.TreeDataProvider<string> {
     }
     if (events > 0) {
       lines.push(`${events} agent edit(s) recorded since the last review.`);
+    }
+    if (flags.length > 0) {
+      lines.push(`Flagged by the agent: ${flags.length} part(s) to type closely.`);
+      for (const flag of flags) {
+        const label = flag.importance === 'must-type' ? 'Must type' : 'Worth typing';
+        // The reason is the agent's text, so nothing in it is read as markup.
+        lines.push(`- ${label}: ${escapeMarkdown(flag.reason)}`);
+      }
     }
     const last = this.log.lastFor(file);
     lines.push(
@@ -268,4 +294,8 @@ function duplicateNames(files: readonly string[]): Set<string> {
 /** The folder a file sits in, workspace-relative — empty at the root itself. */
 function relativeDir(root: string, file: string): string {
   return path.relative(root, path.dirname(file)).replace(/\\/g, '/');
+}
+
+function escapeMarkdown(text: string): string {
+  return text.replace(/[\\`*_{}[\]()#+\-.!|<>~]/g, (c) => `\\${c}`).replace(/\s+/g, ' ');
 }

@@ -8,7 +8,18 @@ import { ChangeSetPanel } from './changeSetPanel';
 import { DebtMode, DebtSource, forgetDebtChoices } from './debtSource';
 import { DebtDecorations, DebtTreeProvider, RowProgress } from './debtView';
 import { RetypeController, BASELINE_SCHEME, REMOVED_SCHEME } from './retypeController';
-import { HookReport, inspectCaptureHook, syncCaptureHook } from './hookInstaller';
+import { CaptureSync, HookReport, inspectCaptureHook, syncCaptureHook } from './hookInstaller';
+import {
+  FlagServerReport,
+  FlagSync,
+  inspectFlagServer,
+  manualCommand,
+  syncFlagServer,
+  userConfigFile,
+} from './flagServerInstaller';
+import { FlagStore } from './flagStore';
+import { SERVER_NAME } from './core/flagServerConfig';
+import { HOOK_EVENTS } from './core/hookSettings';
 import { matchesAny } from './core/glob';
 import { advanceBaseline, dropBaseline, readBaseline } from './core/baselineStore';
 import { hasDebt } from './core/diff';
@@ -22,6 +33,7 @@ let source: DebtSource | undefined;
 let tree: DebtTreeProvider | undefined;
 let retype: RetypeController | undefined;
 let changeSet: ChangeSetPanel | undefined;
+let flags: FlagStore | undefined;
 /** Everything startTracking created, so it can be undone as one. */
 let tracking: vscode.Disposable | undefined;
 
@@ -171,7 +183,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Capture is application-scoped, so it is reconciled whether or not this
   // particular folder is enabled.
-  void applyAgentCapture(context);
+  void applyAgentCapture(context, false);
 }
 
 const CAPTURE_SETTING = 'agentCapture';
@@ -194,29 +206,87 @@ function captureWanted(): boolean {
     .get<boolean>(CAPTURE_SETTING, false);
 }
 
+/** Tail of the reconcile queue: the server half runs the agent's command line,
+ * and two runs overlapping would race each other's changes. */
+let captureSync: Promise<void> = Promise.resolve();
+
 /**
- * Make the installed hook match the setting. Runs on activation as well as on
- * every change, so the setting stays the thing that decides: a machine that
- * received the preference through settings sync installs the hook on its own,
- * and a hook removed by hand outside the editor comes back only because the
- * setting still asks for it.
+ * Make the installed hook and the flag tool's server match the setting. Runs
+ * on activation as well as on every change, so the setting stays the thing
+ * that decides: a machine that received the preference through settings sync
+ * installs both on its own, and one removed by hand outside the editor comes
+ * back only because the setting still asks for it.
+ *
+ * `changed` is false on activation. With capture off it then leaves the
+ * agent's config unread, so a default install never opens it, and with capture
+ * on a server that cannot be registered is left for the check command to
+ * report instead of being announced in every window.
  *
  * Silent when there was nothing to do — which is the default case, capture
  * being off — so activation never announces itself.
  */
-function applyAgentCapture(context: vscode.ExtensionContext): void {
-  const wanted = captureWanted();
-  const result = syncCaptureHook(context, wanted);
-  if (result === 'unchanged' || result === 'failed') return;
-
-  const messages = {
-    installed:
-      'CopyWorkCode: agent capture on. Sessions started from now on will record their edits.',
-    repointed: 'CopyWorkCode: agent capture hook updated to this version.',
-    removed: `CopyWorkCode: agent capture off, hook removed. Review history stays under ${dataHome()}.`,
-  } as const;
-  void vscode.window.showInformationMessage(messages[result]);
+function applyAgentCapture(context: vscode.ExtensionContext, changed = true): Promise<void> {
+  captureSync = captureSync.then(async () => {
+    const wanted = captureWanted();
+    const hook = syncCaptureHook(context, wanted);
+    const server = wanted || changed ? await syncFlagServer(context, wanted) : 'unchanged';
+    announceCapture(context, wanted, changed, hook, server);
+  });
+  return captureSync;
 }
+
+function announceCapture(
+  context: vscode.ExtensionContext,
+  wanted: boolean,
+  changed: boolean,
+  hook: CaptureSync,
+  server: FlagSync
+): void {
+  if (server === 'no-cli' && changed) {
+    const command = wanted ? manualCommand(context) : MANUAL_REMOVE;
+    const message = wanted
+      ? 'CopyWorkCode: the claude command was not found, so the agent cannot flag sections ' +
+        'for you yet. Run this once to register the flag tool:'
+      : 'CopyWorkCode: the claude command was not found, so the flag tool is still ' +
+        'registered. Run this to remove it:';
+    void vscode.window
+      .showWarningMessage(`${message} ${command}`, 'Copy Command')
+      .then((choice) => {
+        if (choice === 'Copy Command') void vscode.env.clipboard.writeText(command);
+      });
+  } else if (server === 'failed') {
+    void vscode.window.showErrorMessage(
+      `CopyWorkCode: the flag tool's entry in ${userConfigFile()} did not change as asked. ` +
+        'Check Agent Hook Configuration shows what is there.'
+    );
+  }
+
+  const flagsOn = server === 'installed' || server === 'repointed' || server === 'unchanged';
+  if (hook === 'installed') {
+    void vscode.window.showInformationMessage(
+      flagsOn
+        ? 'CopyWorkCode: agent capture on. Sessions started from now on will record their ' +
+            'edits and can flag the parts most worth typing.'
+        : 'CopyWorkCode: agent capture on. Sessions started from now on will record their edits.'
+    );
+  } else if (hook === 'repointed') {
+    void vscode.window.showInformationMessage(
+      'CopyWorkCode: agent capture hook updated to this version.'
+    );
+  } else if (hook === 'removed' || server === 'removed') {
+    void vscode.window.showInformationMessage(
+      `CopyWorkCode: agent capture off, ${server === 'removed' ? 'hook and flag tool' : 'hook'} ` +
+        `removed. Review history stays under ${dataHome()}.`
+    );
+  } else if (server === 'installed') {
+    void vscode.window.showInformationMessage(
+      'CopyWorkCode: the agent can now flag the parts of its changes most worth typing, ' +
+        'in sessions started from now on.'
+    );
+  }
+}
+
+const MANUAL_REMOVE = `claude mcp remove --scope user ${SERVER_NAME}`;
 
 /**
  * Switch what the review queue compares against. Git mode is verified before
@@ -462,7 +532,7 @@ async function resetEverything(context: vscode.ExtensionContext): Promise<void> 
         enabled
           ? 'Review data for this workspace is deleted: baselines, captured events and the review log.'
           : 'This workspace has no review data to delete.',
-        'Agent capture is turned off and the hook is removed from the agent settings.',
+        'Agent capture is turned off: the hook and the flag tool are removed from the agent.',
         'Every CopyWorkCode setting goes back to its default, in user and workspace settings.',
         'This cannot be undone.',
       ].join('\n'),
@@ -484,41 +554,50 @@ async function resetEverything(context: vscode.ExtensionContext): Promise<void> 
   }
   // The setting's listener removes the hook when the setting changed. A hook
   // left behind with the setting already off is reconciled here.
-  applyAgentCapture(context);
+  await applyAgentCapture(context);
   void vscode.window.showInformationMessage(
     'CopyWorkCode: reset. Run Enable in this Workspace to start again.'
   );
 }
 
 /**
- * Show what the agent settings file says about the hook next to what the
- * setting asks for, and offer the way to make them agree. Every button goes
- * through the setting, or re-runs the reconcile the setting drives, so the
- * dialog can never leave the two disagreeing.
+ * Show what the agent's files say about the hook and the flag tool's server
+ * next to what the setting asks for, and offer the way to make them agree.
+ * Every button goes through the setting, or re-runs the reconcile the setting
+ * drives, so the dialog can never leave them disagreeing.
  */
 async function checkAgentHook(context: vscode.ExtensionContext): Promise<void> {
   const report = inspectCaptureHook(context);
+  const server = inspectFlagServer(context);
   const wanted = captureWanted();
-  const present = report.events.length > 0;
-  const current = report.command === report.expected;
+  const hookPresent = report.events.length > 0;
+  const hookOk = hookPresent && hookCurrent(report);
+  const serverOk = server.entry.current;
+  // An entry under our name that runs some other script is not ours to remove.
+  const serverLeft = server.entry.script !== undefined;
+  const needsCommand = server.cli === undefined && (wanted ? !serverOk : serverLeft);
 
   const buttons: string[] = [];
-  if (wanted && !(present && current) && report.fileState !== 'unreadable') {
-    buttons.push('Repair Hook');
+  if (wanted && !(hookOk && serverOk) && report.fileState !== 'unreadable') {
+    buttons.push('Repair');
   }
-  if (!wanted && present) buttons.push('Remove Hook');
+  if (!wanted && (hookPresent || serverLeft)) buttons.push('Remove');
+  if (needsCommand) buttons.push('Copy Command');
   buttons.push(wanted ? 'Turn Off Capture' : 'Turn On Capture');
   if (report.fileState !== 'missing') buttons.push('Open Settings File');
 
   const choice = await vscode.window.showInformationMessage(
     'CopyWorkCode: agent hook configuration',
-    { modal: true, detail: describeReport(report, wanted) },
+    { modal: true, detail: describeReport(report, server, wanted) },
     ...buttons
   );
   switch (choice) {
-    case 'Repair Hook':
-    case 'Remove Hook':
-      applyAgentCapture(context);
+    case 'Repair':
+    case 'Remove':
+      await applyAgentCapture(context);
+      return;
+    case 'Copy Command':
+      await vscode.env.clipboard.writeText(wanted ? manualCommand(context) : MANUAL_REMOVE);
       return;
     case 'Turn On Capture':
       return setAgentCapture(true);
@@ -530,7 +609,19 @@ async function checkAgentHook(context: vscode.ExtensionContext): Promise<void> {
   }
 }
 
-function describeReport(report: HookReport, wanted: boolean): string {
+/** The hook runs this install, on every event this version listens for. */
+function hookCurrent(report: HookReport): boolean {
+  return (
+    report.command === report.expected &&
+    HOOK_EVENTS.every((event) => report.events.includes(event))
+  );
+}
+
+function describeReport(
+  report: HookReport,
+  server: FlagServerReport,
+  wanted: boolean
+): string {
   const present = report.events.length > 0;
   const current = report.command === report.expected;
   const lines = [
@@ -547,15 +638,30 @@ function describeReport(report: HookReport, wanted: boolean): string {
       current ? 'Command: runs this install.' : `Command: runs another install. ${report.command}`
     );
   }
-  lines.push(`Agent capture setting: ${wanted ? 'on' : 'off'}.`, '');
-  if (wanted && present && current) {
-    lines.push('Capture is on and the hook matches this install.');
-  } else if (wanted && present) {
-    lines.push('Capture is on but the hook runs an older copy. Repair points it at this install.');
+  lines.push(
+    '',
+    `Agent config: ${server.file}`,
+    server.fileState === 'unreadable'
+      ? 'Flag tool: the file is not valid JSON, so the entry cannot be read.'
+      : server.entry.current
+        ? 'Flag tool: registered from this install.'
+        : server.entry.script
+          ? `Flag tool: registered from another install. ${server.entry.script}`
+          : server.entry.registered
+            ? 'Flag tool: an entry with this name runs something else, and is left alone.'
+            : 'Flag tool: not registered.',
+    server.cli
+      ? `Changes go through: ${server.cli}`
+      : 'The claude command was not found, so the entry can only be changed by hand.'
+  );
+  lines.push('', `Agent capture setting: ${wanted ? 'on' : 'off'}.`);
+  const hookOk = present && hookCurrent(report);
+  if (wanted && hookOk && server.entry.current) {
+    lines.push('Capture is on, and the hook and the flag tool match this install.');
   } else if (wanted) {
-    lines.push('Capture is on but the hook is missing. Repair installs it.');
-  } else if (present) {
-    lines.push('Capture is off but the hook is still installed. Remove takes it out.');
+    lines.push('Capture is on but something is missing or out of date. Repair brings it in line.');
+  } else if (present || server.entry.script) {
+    lines.push('Capture is off but something is still installed. Remove takes it out.');
   } else {
     lines.push('Capture is off and nothing is installed.');
   }
@@ -568,8 +674,9 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
 
   queue = new EventQueue(root);
   log = new ReviewLog(root);
+  flags = new FlagStore(root);
   source = new DebtSource(root, context.workspaceState);
-  retype = new RetypeController(log, source);
+  retype = new RetypeController(log, source, flags);
   changeSet = new ChangeSetPanel(
     context.extensionUri,
     root,
@@ -589,7 +696,7 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
   const decorations = new DebtDecorations(
     (file) => retype?.progressFor(file)?.paused === false
   );
-  tree = new DebtTreeProvider(root, source, queue, log, rowProgress, decorations);
+  tree = new DebtTreeProvider(root, source, queue, log, flags, rowProgress, decorations);
   // Edits to the ignore file from outside the editor still reach the queue.
   const ignoreWatcher = vscode.workspace.createFileSystemWatcher(
     new vscode.RelativePattern(root, IGNORE_FILE)
@@ -605,6 +712,7 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
   tracking = vscode.Disposable.from(
     queue,
     log,
+    flags,
     source,
     retype,
     changeSet,
@@ -616,6 +724,7 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
       tree?.refresh();
     }),
     log.onDidChange(() => tree?.refresh()),
+    flags.onDidChange(() => tree?.refresh()),
     source.onDidChangeMode(() => tree?.refresh()),
     retype.onDidFinish(() => tree?.refresh()),
     // The page's own coverage is on its rows now, so this carries a region
@@ -641,6 +750,7 @@ function startTracking(root: string, context: vscode.ExtensionContext): void {
   context.subscriptions.push({ dispose: () => stopTracking() });
 
   queue.start();
+  flags.start();
   tree.refresh();
 }
 
@@ -649,7 +759,7 @@ function stopTracking(): void {
   if (!tracking) return;
   tracking.dispose();
   tracking = undefined;
-  queue = log = source = tree = retype = changeSet = undefined;
+  queue = log = source = tree = retype = changeSet = flags = undefined;
   void vscode.commands.executeCommand('setContext', 'copyworkcode.enabled', false);
 }
 

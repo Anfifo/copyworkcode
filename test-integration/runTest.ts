@@ -4,7 +4,7 @@ import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { runTests } from '@vscode/test-electron';
 import { HOME_ENV, registerWorkspace } from '../src/core/dataHome';
-import { baselinesDir, statePath } from '../src/core/paths';
+import { baselinesDir, flagsPath, statePath } from '../src/core/paths';
 
 /**
  * Boots a real editor instance against a fixture workspace that already has
@@ -27,6 +27,7 @@ async function main(): Promise<void> {
   // environment, so neither side ever touches the real one.
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cwc-home-'));
   process.env[HOME_ENV] = home;
+  const agentConfig = fs.mkdtempSync(path.join(os.tmpdir(), 'cwc-agent-'));
   registerWorkspace(fixture);
   const baselines = baselinesDir(fixture);
   fs.mkdirSync(baselines, { recursive: true });
@@ -130,6 +131,21 @@ async function main(): Promise<void> {
   fs.writeFileSync(path.join(fixture, 'animated.ts'), 'an1\nan2\n');
   fs.writeFileSync(path.join(baselines, 'animated.ts'), 'an1\n');
 
+  // Two sections, the second flagged by the agent: the walk leads with it.
+  fs.writeFileSync(path.join(fixture, 'flagged.ts'), 'k1\nNEW1\nk2\nNEW2\nk3\n');
+  fs.writeFileSync(path.join(baselines, 'flagged.ts'), 'k1\nk2\nk3\n');
+  // Dated ahead of the baseline written just above, which a flag has to be to count.
+  const flag = {
+    id: 'flag-1',
+    timestamp: new Date(Date.now() + 60_000).toISOString(),
+    file: path.join(fixture, 'flagged.ts'),
+    excerpt: 'NEW2',
+    offset: 11,
+    importance: 'must-type',
+    reason: 'the second change matters',
+  };
+  fs.writeFileSync(flagsPath(fixture), JSON.stringify(flag) + '\n');
+
   // Only visible when comparing against git: committed, then changed, with no
   // snapshot behind it — the case the tracked queue cannot see at all.
   fs.writeFileSync(path.join(fixture, 'gitonly.ts'), 'g1\n');
@@ -141,15 +157,17 @@ async function main(): Promise<void> {
       extensionDevelopmentPath,
       extensionTestsPath,
       launchArgs: [fixture, '--disable-extensions', '--disable-workspace-trust'],
-      extensionTestsEnv: { [HOME_ENV]: home },
+      // The agent's config folder too, so nothing the extension runs against
+      // the agent's command line can reach the real one.
+      extensionTestsEnv: { [HOME_ENV]: home, CLAUDE_CONFIG_DIR: agentConfig },
     });
 
     // Belt and braces: verify the suite's side effects from outside the editor
     // process, so a suite that silently failed to run cannot pass.
     const state = JSON.parse(fs.readFileSync(statePath(fixture), 'utf8'));
-    if (state.reviews.length !== 23) {
+    if (state.reviews.length !== 24) {
       throw new Error(
-        `expected 23 review records in the fixture, found ${state.reviews.length}`
+        `expected 24 review records in the fixture, found ${state.reviews.length}`
       );
     }
     const advanced = fs.readFileSync(path.join(baselines, 'sample.ts'), 'utf8');
@@ -160,6 +178,7 @@ async function main(): Promise<void> {
   } finally {
     fs.rmSync(fixture, { recursive: true, force: true });
     fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(agentConfig, { recursive: true, force: true });
   }
 }
 
