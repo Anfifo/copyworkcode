@@ -51,7 +51,10 @@ the goal of each change before editing.
 - **Upside:** directly improves goal #4 (intent alongside diff) at near-zero cost.
 - **Downside:** touches the user's agent configuration, which is theirs; must be
   suggest-only, never automatic.
-- **Status:** revisit once intent extraction exists and its baseline quality is known.
+- **Status:** partly covered by agent-flagged sections (todo.md), whose server
+  instructions ask for intent without touching the user's configuration. Revisit for the
+  edits the agent does not flag, once intent extraction exists and its baseline quality is
+  known.
 
 ### Quick-fill for low-value regions
 
@@ -66,6 +69,44 @@ status ("filled") distinct from typed and skipped.
 - **Status:** the per-word and per-line fills exist (both counted as skipped, never as
   typed); the region-sized fill and a distinct "filled" status stay parked until real use
   shows where the line between fair and too-easy sits.
+
+### Independent reviewer picks the sections
+
+A second model call, from a hook the agent runs after each edit or at the end of a turn,
+reads only the finished diff and ranks its sections by risk and by what they teach.
+
+- **Upside:** less biased than the author flagging its own work, since it never saw the
+  reasoning that produced the change.
+- **Downside:** a token cost on every edit, paid by the user; blind spots close to the
+  author's, being the same family of model; and the ranking lands after the edit, so a
+  review can open before it arrives.
+- **Status:** parked behind agent-flagged sections (todo.md). Revisit if the flag stats
+  show the author's picks missing what mattered.
+
+### Capture shipped as an agent plugin
+
+The agent's plugin format bundles hooks, an MCP server and instructions in one package,
+installed from inside the agent.
+
+- **Upside:** the plugin owns its hook config, so the surgical edits to the user's settings
+  file go away, and one install brings capture and the flag tool together.
+- **Downside:** the extension's setting stops being the one switch, since the plugin is
+  installed and removed from the agent. The hook loads the extension's compiled core for
+  the shared rules, and a plugin lives at a different path.
+- **Status:** revisit once the flag tool's server has to be registered somewhere.
+
+### Review debt shown inside the agent
+
+The agent's UI extension points (mods) can draw a line above its prompt box ("3 files, 41
+lines waiting review"), add a command that opens the queue without a model turn, and hold
+a tool call until something happens.
+
+- **Upside:** the debt is visible where the next edit is being asked for, the moment it
+  matters most. Holding a call is a softer form of the blocking gate above.
+- **Downside:** a mod runs unsandboxed inside the agent and sees every prompt and tool
+  call, a lot of trust to ask for a counter. It is also a second UI to keep in step with
+  the queue.
+- **Status:** parked; the queue's badge covers this inside the editor.
 
 ## Rejected (kept for the record)
 

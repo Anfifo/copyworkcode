@@ -42,7 +42,28 @@ promoted here when they're deemed worth building.
 - [ ] **Intent extraction** — follow the recorded `transcriptPath` + `toolUseId` back to
       the assistant message that made the change and surface its stated reasoning next to
       the diff. Extract eagerly, near capture time — transcripts get compacted or
-      deleted.
+      deleted. The transcript's format is internal to the agent and changes between
+      versions, so the reader has to fail soft. Flagged sections (below) carry their intent
+      directly; this covers every edit the agent did not flag.
+- [ ] **Agent-flagged sections** — a local MCP server shipped with the extension gives the
+      agent one tool to call after it edits: flag a stretch of the change as must-type or
+      worth typing, with a reason and the intent behind it. The anchor is a snippet of the
+      edited text, resolved to a range when the call arrives and carried forward like any
+      section's progress. Flags only add to a review. A flagged section is required and
+      sorts first, and nothing the agent says can make a section optional: the author
+      choosing what its reviewer reads is the over-trust the product exists to counter. An
+      opt-in mode requires only the flagged sections and records the rest as skipped. Stats
+      keep typed-flagged and typed-unflagged apart, so it shows over time whether the flags
+      point at what mattered. The server's own instructions tell the agent to use the tool,
+      so the user's agent instructions stay untouched. Open before building:
+      - Where the server is registered. The user-scope MCP list lives in the agent's own
+        config file, which the agent rewrites constantly; a plugin owns its config but takes
+        the on/off switch out of the extension (see brainstorm.md).
+      - Where a reason shows during review: the section's hover, the review strip, the
+        change set page.
+      - Whether an end-of-turn hook should hold the agent back when it edited files and
+        flagged nothing. It makes flagging reliable and costs a model turn each time, so it
+        would be off by default.
 - [ ] **Heuristic detection layer** — tool-agnostic fallback for assistants without hooks,
       a whole file pasted from a chat window, or external tools writing to disk. Large
       multi-line insertions in the editor that don't match keystroke-by-keystroke typing
@@ -56,9 +77,11 @@ promoted here when they're deemed worth building.
 
 ## Later
 
-- [ ] **Stale-context re-sync prompt** — a review can now end with sections the reviewer
-      rewrote, which means the agent's picture of the file is out of date. Offer a pastable
-      summary of what they changed, built from the sections recorded as edited.
+- [ ] **Stale-context re-sync** — a review can now end with sections the reviewer
+      rewrote, which means the agent's picture of the file is out of date. The agent's hook
+      for a submitted prompt can add context to that turn, so the capture hook could tell it
+      which sections were rewritten since its last edit, built from the sections recorded as
+      edited. A pastable summary covers agents without that hook.
 - [ ] Auto-skip rules beyond globs: by change size and change kind (formatting-only).
 - [ ] Review stats: typed vs. skipped ratios over time, per file area.
 - [ ] Adapters for more agents beyond the first integration.
